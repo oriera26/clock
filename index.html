@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Rellotge SF Pro | Espaiat Final</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            font-family: '-apple-system', 'BlinkMacSystemFont', 'Inter', sans-serif;
+        }
+        .clock-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #000;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+<div class="clock-container">
+    <canvas id="clockCanvas"></canvas>
+</div>
+
+<script>
+    (function() {
+        const canvas = document.getElementById('clockCanvas');
+        const ctx = canvas.getContext('2d', { alpha: false });
+        
+        // --- PARÀMETRES D'ESPAIAT REFINATS ---
+        const CYCLE_DURATION = 1000;  
+        const ANIM_PHASE = 500;       
+        const SCALE_Y = 1.7;          
+        const BLOOM_AMOUNT = 35;      
+        const LETTER_SPACING = 0.95;  // Espaiat generós entre números
+        const COLON_SQUEEZE = 0.75;   // Ajustat: una mica més d'espai per als ":" (abans 0.65)
+        const PADDING_PERCENT = 0.92; 
+        
+        let digits = []; 
+        const DIGIT_COUNT = 8; 
+        
+        let fontSize = 0;
+        let charWidth = 0;
+        let colonWidth = 0;
+        let dpr = 1;
+
+        function getTimeArray() {
+            const d = new Date();
+            const h = String(d.getHours()).padStart(2, '0');
+            const m = String(d.getMinutes()).padStart(2, '0');
+            const s = String(d.getSeconds()).padStart(2, '0');
+            return `${h}:${m}:${s}`.split('');
+        }
+
+        function easeOutBack(x) {
+            const c1 = 1.2;
+            const c3 = c1 + 1;
+            return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+        }
+
+        function initDigits() {
+            const current = getTimeArray();
+            digits = current.map(char => ({
+                current: char,
+                target: char,
+                startTime: 0,
+                isAnimating: false
+            }));
+        }
+
+        function updateLayout() {
+            dpr = window.devicePixelRatio || 1;
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            
+            canvas.width = w * dpr;
+            canvas.height = h * dpr;
+            
+            const isPortrait = h > w;
+            let tempFontSize = isPortrait ? w * 0.28 : w * 0.22; 
+            
+            ctx.font = `900 ${tempFontSize * dpr}px '-apple-system', 'BlinkMacSystemFont', 'Inter', sans-serif`;
+            
+            // Recàlcul d'amplades amb els nous paràmetres
+            let tempDigitWidth = ctx.measureText('0').width * LETTER_SPACING;
+            let tempColonWidth = ctx.measureText(':').width * COLON_SQUEEZE;
+            let totalWidth = (tempDigitWidth * 6) + (tempColonWidth * 2);
+
+            const maxWidth = w * dpr * PADDING_PERCENT;
+            if (totalWidth > maxWidth) {
+                const scaleFactor = maxWidth / totalWidth;
+                tempFontSize *= scaleFactor;
+                ctx.font = `900 ${tempFontSize * dpr}px '-apple-system', 'BlinkMacSystemFont', 'Inter', sans-serif`;
+                tempDigitWidth = ctx.measureText('0').width * LETTER_SPACING;
+                tempColonWidth = ctx.measureText(':').width * COLON_SQUEEZE;
+            }
+
+            const maxHeight = h * dpr * 0.70;
+            const currentHeight = tempFontSize * dpr * SCALE_Y;
+            if (currentHeight > maxHeight) {
+                const scaleFactor = maxHeight / currentHeight;
+                tempFontSize *= scaleFactor;
+                ctx.font = `900 ${tempFontSize * dpr}px '-apple-system', 'BlinkMacSystemFont', 'Inter', sans-serif`;
+                tempDigitWidth = ctx.measureText('0').width * LETTER_SPACING;
+                tempColonWidth = ctx.measureText(':').width * COLON_SQUEEZE;
+            }
+
+            fontSize = tempFontSize * dpr;
+            charWidth = tempDigitWidth;
+            colonWidth = tempColonWidth;
+        }
+
+        function drawPureText(text, x, y, alpha) {
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.shadowColor = 'rgba(255, 255, 255, 0.35)';
+            ctx.shadowBlur = (BLOOM_AMOUNT * (fontSize / 300)) * alpha;
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillText(text, x, y);
+            ctx.restore();
+        }
+
+        function drawDotSeparator(x, y, alpha) {
+            const dotSize = fontSize * 0.12; 
+            const verticalSpacing = fontSize * 0.30; 
+            
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = '#FFFFFF';
+            ctx.shadowColor = 'rgba(255, 255, 255, 0.4)';
+            ctx.shadowBlur = (BLOOM_AMOUNT * 0.5 * (fontSize / 300)) * alpha;
+            
+            // Dibuixem els dos punts centrats en l'espai reservat per al colon
+            ctx.beginPath();
+            ctx.arc(x, y - verticalSpacing, dotSize, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.beginPath();
+            ctx.arc(x, y + verticalSpacing, dotSize, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.restore();
+        }
+
+        function drawDigit(charData, x, y, now) {
+            const isColon = charData.current === ':';
+            
+            ctx.save();
+            ctx.translate(x, y);
+            if (!isColon) ctx.scale(1, SCALE_Y);
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = `900 ${fontSize}px '-apple-system', 'BlinkMacSystemFont', 'Inter', sans-serif`;
+
+            if (isColon) {
+                drawDotSeparator(0, 0, 0.9);
+            } else if (!charData.isAnimating) {
+                drawPureText(charData.current, 0, 0, 1.0);
+            } else {
+                const elapsed = now - charData.startTime;
+                const t = Math.min(elapsed / ANIM_PHASE, 1);
+                const ease = easeOutBack(t);
+                const offset = ease * fontSize;
+
+                if (t < 1) {
+                    drawPureText(charData.current, 0, -offset, Math.max(0, 1 - t * 3.5));
+                }
+                drawPureText(charData.target, 0, fontSize - offset, Math.min(1, t * 3.5));
+
+                if (t === 1 && elapsed >= (CYCLE_DURATION - 20)) {
+                    charData.current = charData.target;
+                    charData.isAnimating = false;
+                }
+            }
+            ctx.restore();
+        }
+
+        function render(timestamp) {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const totalWidth = (charWidth * 6) + (colonWidth * 2);
+            let currentX = (canvas.width - totalWidth) / 2;
+            const centerY = canvas.height / 2;
+
+            digits.forEach((d, i) => {
+                const isColon = d.current === ':';
+                const thisWidth = isColon ? colonWidth : charWidth;
+                
+                // Centrem el caràcter dins del seu propi espai
+                drawDigit(d, currentX + thisWidth / 2, centerY, timestamp);
+                currentX += thisWidth;
+            });
+
+            requestAnimationFrame(render);
+        }
+
+        function checkTime() {
+            const nowArr = getTimeArray();
+            const now = performance.now();
+            
+            nowArr.forEach((char, i) => {
+                if (digits[i].current !== char && !digits[i].isAnimating) {
+                    digits[i].target = char;
+                    digits[i].startTime = now;
+                    digits[i].isAnimating = true;
+                }
+            });
+        }
+
+        function handleResize() {
+            updateLayout();
+        }
+
+        function init() {
+            initDigits();
+            updateLayout();
+            window.addEventListener('resize', handleResize);
+            setInterval(checkTime, 16); 
+            requestAnimationFrame(render);
+        }
+
+        if (document.fonts) {
+            document.fonts.ready.then(init);
+        } else {
+            init();
+        }
+    })();
+</script>
+</body>
+</html>
