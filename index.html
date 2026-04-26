@@ -55,7 +55,6 @@
             will-change: transform;
         }
 
-        /* Playlist UI */
         #playlist-container {
             position: absolute;
             bottom: 30px;
@@ -124,7 +123,6 @@
             text-overflow: ellipsis;
         }
 
-        /* Controls */
         #player-controls {
             display: flex;
             justify-content: center;
@@ -146,24 +144,10 @@
             color: white;
         }
 
-        .control-btn:hover {
-            background: var(--apple-active);
-        }
-
-        .control-btn:active {
-            transform: scale(0.92);
-        }
-
-        .control-btn svg {
-            width: 24px;
-            height: 24px;
-            fill: currentColor;
-        }
-
-        .play-pause-btn svg {
-            width: 32px;
-            height: 32px;
-        }
+        .control-btn:hover { background: var(--apple-active); }
+        .control-btn:active { transform: scale(0.92); }
+        .control-btn svg { width: 24px; height: 24px; fill: currentColor; }
+        .play-pause-btn svg { width: 32px; height: 32px; }
 
         #queue {
             max-height: 140px;
@@ -197,19 +181,8 @@
             background-size: cover;
         }
 
-        .queue-details {
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        .queue-name {
-            color: #fff;
-            font-size: 0.8rem;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
+        .queue-details { display: flex; flex-direction: column; overflow: hidden; }
+        .queue-name { color: #fff; font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
         #upload-label {
             display: block;
@@ -225,7 +198,6 @@
         }
 
         #upload-label:hover { color: white; }
-
         input[type="file"] { display: none; }
     </style>
 </head>
@@ -286,13 +258,11 @@
         
         let audioCtx, analyserL, analyserR, dataL, dataR, source;
         let audio = new Audio();
-        // Evitem problemes de CORS
         audio.crossOrigin = "anonymous";
         
         let playlist = [];
         let currentIndex = -1;
         let hideTimeout;
-        let currentObjectURL = null;
         
         let smoothL = 0, smoothR = 0, smoothC = 0;
         let hue = 0;
@@ -332,18 +302,11 @@
             }
             
             updateQueueUI();
-            
-            if (wasEmpty && playlist.length > 0) {
-                playTrack(0);
-            }
+            if (wasEmpty && playlist.length > 0) playTrack(0);
         }
 
         function getMetadata(file) {
             return new Promise((resolve) => {
-                if (typeof jsmediatags === 'undefined') {
-                    resolve({ title: file.name.split('.').slice(0, -1).join('.'), artist: "Artista desconegut", art: null });
-                    return;
-                }
                 jsmediatags.read(file, {
                     onSuccess: function(tag) {
                         let art = null;
@@ -373,18 +336,12 @@
             playlist.forEach((item, index) => {
                 const div = document.createElement('div');
                 div.className = `queue-item ${index === currentIndex ? 'active' : ''}`;
-                div.onclick = (e) => {
-                    e.stopPropagation();
-                    playTrack(index);
-                };
+                div.onclick = (e) => { e.stopPropagation(); playTrack(index); };
                 
                 const artDiv = document.createElement('div');
                 artDiv.className = 'queue-art';
-                if (item.metadata.art) {
-                    artDiv.style.backgroundImage = `url(${item.metadata.art})`;
-                } else {
-                    artDiv.style.background = 'linear-gradient(45deg, #222, #444)';
-                }
+                if (item.metadata.art) artDiv.style.backgroundImage = `url(${item.metadata.art})`;
+                else artDiv.style.background = 'linear-gradient(45deg, #222, #444)';
                 
                 const details = document.createElement('div');
                 details.className = 'queue-details';
@@ -399,58 +356,41 @@
         async function playTrack(index) {
             if (index < 0 || index >= playlist.length) return;
             
-            // Re-activar el context d'àudio
-            if (audioCtx && audioCtx.state === 'suspended') {
-                await audioCtx.resume();
-            }
+            if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
 
             currentIndex = index;
             const track = playlist[index];
             
-            // Alliberar memòria de l'URL anterior
-            if (currentObjectURL) {
-                URL.revokeObjectURL(currentObjectURL);
-            }
-            
-            currentObjectURL = URL.createObjectURL(track.file);
-            
-            // Assignar dades UI
+            // UI
             trackName.textContent = track.metadata.title;
             trackArtist.textContent = track.metadata.artist;
-            if (track.metadata.art) {
-                trackArt.style.backgroundImage = `url(${track.metadata.art})`;
-            } else {
-                trackArt.style.backgroundImage = 'linear-gradient(45deg, #111, #444)';
-            }
-
+            trackArt.style.backgroundImage = track.metadata.art ? `url(${track.metadata.art})` : 'linear-gradient(45deg, #111, #444)';
             updateQueueUI();
-            
-            // Configuració de l'àudio
-            audio.pause();
-            audio.src = currentObjectURL;
-            audio.load(); // Forçar la càrrega del nou recurs
 
-            // Esperar que estigui llest per evitar l'error de source
-            audio.oncanplaythrough = () => {
-                audio.oncanplaythrough = null;
-                initAudioNodes();
-                audio.play().then(() => {
-                    updatePlayIcons();
-                    hideTimeout = setTimeout(() => togglePlaylist(false), 4000);
-                }).catch(e => {
-                    console.error("Error al reproduir:", e);
-                });
+            // Ús de FileReader per evitar errors de "NotSupportedError" amb Blobs
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                audio.pause();
+                audio.src = e.target.result;
+                audio.load();
+                
+                // Intentar reproduir un cop carregat el DataURL
+                audio.oncanplay = () => {
+                    audio.oncanplay = null;
+                    initAudioNodes();
+                    audio.play().then(() => {
+                        updatePlayIcons();
+                        hideTimeout = setTimeout(() => togglePlaylist(false), 4000);
+                    }).catch(console.error);
+                };
             };
+            reader.readAsDataURL(track.file);
         }
 
         function updatePlayIcons() {
-            if (audio.paused) {
-                playIcon.style.display = 'block';
-                pauseIcon.style.display = 'none';
-            } else {
-                playIcon.style.display = 'none';
-                pauseIcon.style.display = 'block';
-            }
+            const isPaused = audio.paused;
+            playIcon.style.display = isPaused ? 'block' : 'none';
+            pauseIcon.style.display = isPaused ? 'none' : 'block';
         }
 
         function initAudioNodes() {
@@ -462,7 +402,6 @@
                 analyserL.fftSize = 128;
                 analyserR.fftSize = 128;
                 
-                // Connectem la font
                 source = audioCtx.createMediaElementSource(audio);
                 source.connect(splitter);
                 splitter.connect(analyserL, 0);
@@ -475,45 +414,29 @@
             }
         }
 
-        // Controls
         playPauseBtn.onclick = async (e) => {
             e.stopPropagation();
             if (!audio.src) return;
-            
-            if (audioCtx && audioCtx.state === 'suspended') {
-                await audioCtx.resume();
-            }
+            if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
 
-            if (audio.paused) {
-                audio.play();
-            } else {
-                audio.pause();
-            }
-            updatePlayIcons();
+            if (audio.paused) audio.play().then(updatePlayIcons);
+            else { audio.pause(); updatePlayIcons(); }
         };
 
         prevBtn.onclick = (e) => {
             e.stopPropagation();
-            if (audio.currentTime > 3) {
-                audio.currentTime = 0;
-            } else if (currentIndex > 0) {
-                playTrack(currentIndex - 1);
-            }
+            if (audio.currentTime > 3) audio.currentTime = 0;
+            else if (currentIndex > 0) playTrack(currentIndex - 1);
         };
 
         nextBtn.onclick = (e) => {
             e.stopPropagation();
-            if (currentIndex < playlist.length - 1) {
-                playTrack(currentIndex + 1);
-            }
+            if (currentIndex < playlist.length - 1) playTrack(currentIndex + 1);
         };
 
         audio.onended = () => {
-            if (currentIndex < playlist.length - 1) {
-                playTrack(currentIndex + 1);
-            } else {
-                updatePlayIcons();
-            }
+            if (currentIndex < playlist.length - 1) playTrack(currentIndex + 1);
+            else updatePlayIcons();
         };
 
         function render() {
@@ -521,14 +444,11 @@
             if (analyserL && analyserR) {
                 analyserL.getByteFrequencyData(dataL);
                 analyserR.getByteFrequencyData(dataR);
-                
                 let bassL = (dataL[0] + dataL[1] + dataL[2]) / 765;
                 let bassR = (dataR[0] + dataR[1] + dataR[2]) / 765;
-                
                 smoothL += (bassL - smoothL) * 0.15;
                 smoothR += (bassR - smoothR) * 0.15;
                 smoothC = (smoothL + smoothR) * 0.5;
-                
                 hue = (hue + 0.15 + (smoothC * 0.6)) % 360; 
             }
             updateClock();
@@ -540,54 +460,36 @@
             ctx.globalCompositeOperation = 'lighter';
             const baseFade = Math.min(w, h) * 0.12;
             
-            // Visualització Ambilight lateral i superior/inferior
+            const drawGlow = (x, y, width, height, hueVal, smoothVal) => {
+                const grad = ctx.createLinearGradient(x, y, x + (width === w ? 0 : width), y + (height === h ? 0 : height));
+                grad.addColorStop(0, `hsla(${hueVal}, 100%, 45%, ${0.1 + smoothVal * 0.6})`);
+                grad.addColorStop(1, 'transparent');
+                ctx.fillStyle = grad;
+                ctx.fillRect(x, y, width, height);
+            };
+
             const sL = baseFade + (smoothL * baseFade * 1.8);
-            const gL = ctx.createLinearGradient(0,0, sL, 0);
-            gL.addColorStop(0, `hsla(${hue}, 100%, 45%, ${0.1 + smoothL * 0.6})`);
-            gL.addColorStop(1, 'transparent');
-            ctx.fillStyle = gL; ctx.fillRect(0,0, sL, h);
+            drawGlow(0, 0, sL, h, hue, smoothL);
 
             const sR = baseFade + (smoothR * baseFade * 1.8);
-            const gR = ctx.createLinearGradient(w,0, w-sR, 0);
-            gR.addColorStop(0, `hsla(${(hue+180)%360}, 100%, 45%, ${0.1 + smoothR * 0.6})`);
-            gR.addColorStop(1, 'transparent');
-            ctx.fillStyle = gR; ctx.fillRect(w-sR,0, sR, h);
+            drawGlow(w - sR, 0, sR, h, (hue + 180) % 360, smoothR);
 
             const sC = baseFade + (smoothC * baseFade * 1.2);
-            const gT = ctx.createLinearGradient(0,0,0, sC);
-            gT.addColorStop(0, `hsla(${(hue+90)%360}, 100%, 45%, ${0.05 + smoothC * 0.5})`);
-            gT.addColorStop(1, 'transparent');
-            ctx.fillStyle = gT; ctx.fillRect(0,0, w, sC);
-
-            const gB = ctx.createLinearGradient(0,h,0, h-sC);
-            gB.addColorStop(0, `hsla(${(hue+270)%360}, 100%, 45%, ${0.05 + smoothC * 0.5})`);
-            gB.addColorStop(1, 'transparent');
-            ctx.fillStyle = gB; ctx.fillRect(0,h-sC, w, sC);
+            drawGlow(0, 0, w, sC, (hue + 90) % 360, smoothC);
+            drawGlow(0, h - sC, w, sC, (hue + 270) % 360, smoothC);
 
             clockElement.style.transform = `scale(${1 + (smoothC * 0.08)})`;
         }
 
-        audioInput.onchange = (e) => {
-            if (e.target.files.length > 0) {
-                handleFiles(e.target.files);
-            }
-        };
+        audioInput.onchange = (e) => { if (e.target.files.length > 0) handleFiles(e.target.files); };
 
         window.onclick = async (e) => {
-            if (audioCtx && audioCtx.state === 'suspended') {
-                await audioCtx.resume();
-            }
-
-            if (!playlistContainer.contains(e.target)) {
-                const isMinimized = playlistContainer.classList.contains('minimized');
-                togglePlaylist(isMinimized);
-            }
+            if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
+            if (!playlistContainer.contains(e.target)) togglePlaylist(playlistContainer.classList.contains('minimized'));
         };
 
         setInterval(updateClock, 1000);
         updateClock();
-        
-        // Iniciem amb la interfície visible
         togglePlaylist(true);
     </script>
 </body>
