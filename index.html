@@ -157,7 +157,6 @@
         <div id="clock">00:00:00</div>
     </div>
 
-    <!-- Utilitzem un sol element d'àudio persistent -->
     <div id="audio-element-container">
         <audio id="main-audio" crossOrigin="anonymous"></audio>
     </div>
@@ -222,18 +221,16 @@
             clockElement.textContent = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
         }
 
-        // Inicialització única de l'AudioContext i connexió de l'element d'àudio
         function initAudioContext() {
             if (audioCtx) return;
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             analyserL = audioCtx.createAnalyser();
             analyserR = audioCtx.createAnalyser();
-            analyserL.fftSize = 128;
-            analyserR.fftSize = 128;
+            analyserL.fftSize = 256; // Més resolució per a les vores
+            analyserR.fftSize = 256;
             dataL = new Uint8Array(analyserL.frequencyBinCount);
             dataR = new Uint8Array(analyserR.frequencyBinCount);
 
-            // Connectem l'element d'àudio persistent només una vegada
             sourceNode = audioCtx.createMediaElementSource(mainAudio);
             const splitter = audioCtx.createChannelSplitter(2);
             sourceNode.connect(splitter);
@@ -279,10 +276,9 @@
             currentIndex = index;
             const track = playlist[index];
             trackName.textContent = track.title;
-            trackArtist.textContent = "Carregant pista...";
+            trackArtist.textContent = "Preparant...";
             updateQueueUI();
 
-            // Simplement canviem el 'src' de l'element persistent
             mainAudio.src = track.url;
             mainAudio.load();
             
@@ -290,17 +286,13 @@
                 trackArtist.textContent = "Reproduint";
                 updateButtons();
             }).catch(err => {
-                console.error("Error en reproduir:", err);
-                trackArtist.textContent = "Error de reproducció";
+                console.error("Error:", err);
+                trackArtist.textContent = "Error de format";
             });
         }
 
         mainAudio.onended = () => {
             if (currentIndex < playlist.length - 1) playTrack(currentIndex + 1);
-        };
-
-        mainAudio.onerror = () => {
-            trackArtist.textContent = "Error en el fitxer MP3";
         };
 
         function updateButtons() {
@@ -327,40 +319,70 @@
         function render() {
             requestAnimationFrame(render);
             const isPlaying = !mainAudio.paused;
+            
             if (analyserL && isPlaying) {
                 analyserL.getByteFrequencyData(dataL);
                 analyserR.getByteFrequencyData(dataR);
-                let bL = (dataL[0] + dataL[1] + dataL[2]) / 765;
-                let bR = (dataR[0] + dataR[1] + dataR[2]) / 765;
+                
+                // Càlcul de brillantor basat en baixos i mitjos
+                let bL = (dataL[1] + dataL[2] + dataL[3]) / 765;
+                let bR = (dataR[1] + dataR[2] + dataR[3]) / 765;
+                
                 smoothL += (bL - smoothL) * 0.15;
                 smoothR += (bR - smoothR) * 0.15;
                 smoothC = (smoothL + smoothR) * 0.5;
-                hue = (hue + 0.2 + (smoothC * 0.8)) % 360;
+                
+                // Canvi de color suau
+                hue = (hue + 0.3 + (smoothC * 1.5)) % 360;
             } else {
-                smoothL *= 0.9; smoothR *= 0.9; smoothC *= 0.9;
+                smoothL *= 0.95; smoothR *= 0.95; smoothC *= 0.95;
             }
 
             updateClock();
+            
+            // Fons negre pur
             ctx.globalCompositeOperation = 'source-over';
             ctx.fillStyle = '#000';
             ctx.fillRect(0, 0, w, h);
             
-            ctx.globalCompositeOperation = 'lighter';
-            const baseFade = Math.min(w, h) * 0.15;
-            const drawG = (x, y, wi, he, hV, sV) => {
-                const grad = ctx.createLinearGradient(x, y, x + (wi === w ? 0 : wi), y + (he === h ? 0 : he));
-                grad.addColorStop(0, `hsla(${hV}, 100%, 50%, ${0.05 + sV * 0.75})`);
-                grad.addColorStop(1, 'transparent');
-                ctx.fillStyle = grad;
-                ctx.fillRect(x, y, wi, he);
-            };
+            // Efecte Ambilight vibrant
+            ctx.globalCompositeOperation = 'screen';
+            
+            // Mida dinàmica de l'halo
+            const edgeSize = Math.min(w, h) * 0.35; 
+            const pulse = edgeSize * smoothC;
 
-            drawG(0, 0, baseFade + (smoothL * baseFade * 2), h, hue, smoothL);
-            drawG(w - (baseFade + (smoothR * baseFade * 2)), 0, baseFade + (smoothR * baseFade * 2), h, (hue + 180) % 360, smoothR);
-            const vG = baseFade + (smoothC * baseFade);
-            drawG(0, 0, w, vG, (hue + 90) % 360, smoothC);
-            drawG(0, h - vG, w, vG, (hue + 270) % 360, smoothC);
-            clockElement.style.transform = `scale(${1 + (smoothC * 0.1)})`;
+            // Gradient ESQUERRA
+            const gradL = ctx.createLinearGradient(0, 0, edgeSize + pulse, 0);
+            gradL.addColorStop(0, `hsla(${hue}, 100%, 50%, ${0.1 + smoothL * 0.8})`);
+            gradL.addColorStop(1, 'transparent');
+            ctx.fillStyle = gradL;
+            ctx.fillRect(0, 0, edgeSize + pulse, h);
+
+            // Gradient DRETA
+            const gradR = ctx.createLinearGradient(w, 0, w - (edgeSize + pulse), 0);
+            gradR.addColorStop(0, `hsla(${(hue + 60) % 360}, 100%, 50%, ${0.1 + smoothR * 0.8})`);
+            gradR.addColorStop(1, 'transparent');
+            ctx.fillStyle = gradR;
+            ctx.fillRect(w - (edgeSize + pulse), 0, edgeSize + pulse, h);
+
+            // Gradient SUPERIOR
+            const gradT = ctx.createLinearGradient(0, 0, 0, edgeSize * 0.7 + pulse);
+            gradT.addColorStop(0, `hsla(${(hue + 30) % 360}, 100%, 50%, ${0.1 + smoothC * 0.7})`);
+            gradT.addColorStop(1, 'transparent');
+            ctx.fillStyle = gradT;
+            ctx.fillRect(0, 0, w, edgeSize * 0.7 + pulse);
+
+            // Gradient INFERIOR
+            const gradB = ctx.createLinearGradient(0, h, 0, h - (edgeSize * 0.7 + pulse));
+            gradB.addColorStop(0, `hsla(${(hue + 200) % 360}, 100%, 50%, ${0.1 + smoothC * 0.7})`);
+            gradB.addColorStop(1, 'transparent');
+            ctx.fillStyle = gradB;
+            ctx.fillRect(0, h - (edgeSize * 0.7 + pulse), w, edgeSize * 0.7 + pulse);
+
+            // Animació del rellotge
+            clockElement.style.transform = `scale(${1 + (smoothC * 0.15)})`;
+            clockElement.style.textShadow = `0 0 ${20 + smoothC * 60}px hsla(${hue}, 100%, 70%, 0.5)`;
         }
 
         window.onclick = (e) => {
