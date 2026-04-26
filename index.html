@@ -95,6 +95,9 @@
             background-position: center;
             flex-shrink: 0;
             box-shadow: 0 8px 16px rgba(0,0,0,0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         #track-info {
@@ -197,6 +200,20 @@
 
         #upload-label:hover { color: white; }
         input[type="file"] { display: none; }
+
+        /* Estil per al missatge de càrrega */
+        .loading-spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -298,6 +315,7 @@
             const wasEmpty = playlist.length === 0;
             
             for (const file of newFiles) {
+                if (!file.type.startsWith('audio/')) continue;
                 playlist.push({ 
                     file, 
                     metadata: { 
@@ -336,30 +354,39 @@
         async function playTrack(index) {
             if (index < 0 || index >= playlist.length) return;
             
-            // Inicialitzar context d'àudio només quan calgui (interacció usuari)
             if (!audioCtx) initAudioNodes();
             if (audioCtx.state === 'suspended') await audioCtx.resume();
 
-            // Aturar reproducció actual
             stopCurrent();
 
             currentIndex = index;
             const track = playlist[index];
             
-            // UI
-            trackName.textContent = track.metadata.title;
-            trackArtist.textContent = track.metadata.artist;
-            trackArt.style.backgroundImage = 'linear-gradient(45deg, #111, #444)';
+            trackName.textContent = "Carregant...";
+            trackArtist.textContent = track.metadata.title;
+            trackArt.innerHTML = '<div class="loading-spinner"></div>';
             updateQueueUI();
 
-            // Llegir i descodificar l'àudio directament en memòria (sense src/blob)
-            const arrayBuffer = await track.file.arrayBuffer();
-            audioCtx.decodeAudioData(arrayBuffer, (buffer) => {
-                currentBuffer = buffer;
-                pauseOffset = 0;
-                startPlayback();
-                hideTimeout = setTimeout(() => togglePlaylist(false), 4000);
-            }, (err) => console.error("Error descodificant àudio:", err));
+            try {
+                const arrayBuffer = await track.file.arrayBuffer();
+                audioCtx.decodeAudioData(arrayBuffer, (buffer) => {
+                    currentBuffer = buffer;
+                    pauseOffset = 0;
+                    trackName.textContent = track.metadata.title;
+                    trackArtist.textContent = track.metadata.artist;
+                    trackArt.innerHTML = '';
+                    trackArt.style.backgroundImage = 'linear-gradient(45deg, #111, #444)';
+                    startPlayback();
+                    hideTimeout = setTimeout(() => togglePlaylist(false), 4000);
+                }, (err) => {
+                    console.error("Error descodificant àudio:", err);
+                    trackName.textContent = "Error de format";
+                    trackArt.innerHTML = '⚠️';
+                });
+            } catch (e) {
+                console.error("Error en processar el fitxer:", e);
+                trackName.textContent = "Error en llegir fitxer";
+            }
         }
 
         function startPlayback() {
@@ -369,7 +396,6 @@
             audioSource.buffer = currentBuffer;
             audioSource.connect(audioCtx.destination);
             
-            // Connectar a analitzadors
             const splitter = audioCtx.createChannelSplitter(2);
             audioSource.connect(splitter);
             splitter.connect(analyserL, 0);
