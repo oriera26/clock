@@ -21,6 +21,7 @@
             justify-content: center;
             align-items: center;
             font-family: 'SF Pro Display', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            user-select: none;
         }
 
         canvas {
@@ -91,8 +92,6 @@
             height: 60px;
             border-radius: 12px;
             background: linear-gradient(45deg, #333, #555);
-            background-size: cover;
-            background-position: center;
             flex-shrink: 0;
             box-shadow: 0 8px 16px rgba(0,0,0,0.4);
             display: flex;
@@ -179,7 +178,6 @@
             height: 34px;
             border-radius: 6px;
             background: #222;
-            background-size: cover;
         }
 
         .queue-details { display: flex; flex-direction: column; overflow: hidden; }
@@ -195,25 +193,19 @@
             text-transform: uppercase;
             letter-spacing: 1px;
             cursor: pointer;
-            transition: color 0.2s;
         }
 
         #upload-label:hover { color: white; }
         input[type="file"] { display: none; }
 
-        /* Estil per al missatge de càrrega */
         .loading-spinner {
-            width: 20px;
-            height: 20px;
+            width: 20px; height: 20px;
             border: 2px solid rgba(255,255,255,0.3);
             border-top-color: white;
             border-radius: 50%;
             animation: spin 1s linear infinite;
         }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -223,6 +215,9 @@
     <div id="ui-layer">
         <div id="clock">00:00:00</div>
     </div>
+
+    <!-- Element àudio ocult: la clau de la robustesa -->
+    <audio id="audio-element" crossorigin="anonymous"></audio>
 
     <div id="playlist-container">
         <div id="current-track">
@@ -234,14 +229,14 @@
         </div>
 
         <div id="player-controls">
-            <button class="control-btn" id="prev-btn" title="Anterior">
+            <button class="control-btn" id="prev-btn">
                 <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
             </button>
-            <button class="control-btn play-pause-btn" id="play-pause-btn" title="Reproduir/Pausar">
+            <button class="control-btn play-pause-btn" id="play-pause-btn">
                 <svg id="play-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                 <svg id="pause-icon" viewBox="0 0 24 24" style="display:none;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
             </button>
-            <button class="control-btn" id="next-btn" title="Següent">
+            <button class="control-btn" id="next-btn">
                 <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
             </button>
         </div>
@@ -259,31 +254,21 @@
         const ctx = canvas.getContext('2d', { alpha: false });
         const clockElement = document.getElementById('clock');
         const audioInput = document.getElementById('audio-input');
+        const audioEl = document.getElementById('audio-element');
         const queueElement = document.getElementById('queue');
         const trackArt = document.getElementById('track-art');
         const trackName = document.getElementById('track-name');
         const trackArtist = document.getElementById('track-artist');
         const playlistContainer = document.getElementById('playlist-container');
-        
         const playPauseBtn = document.getElementById('play-pause-btn');
         const playIcon = document.getElementById('play-icon');
         const pauseIcon = document.getElementById('pause-icon');
-        const prevBtn = document.getElementById('prev-btn');
-        const nextBtn = document.getElementById('next-btn');
         
-        let audioCtx, analyserL, analyserR, dataL, dataR;
-        let audioSource = null;
-        let isPlaying = false;
-        let startTime = 0;
-        let pauseOffset = 0;
-        let currentBuffer = null;
-        
+        let audioCtx, analyserL, analyserR, dataL, dataR, sourceNode;
         let playlist = [];
         let currentIndex = -1;
         let hideTimeout;
-        
-        let smoothL = 0, smoothR = 0, smoothC = 0;
-        let hue = 0;
+        let smoothL = 0, smoothR = 0, smoothC = 0, hue = 0;
         let w, h;
 
         function resize() {
@@ -310,25 +295,46 @@
             }
         }
 
-        async function handleFiles(files) {
-            const newFiles = Array.from(files);
-            const wasEmpty = playlist.length === 0;
+        // Inicialització del context d'àudio (NOMÉS UN COP)
+        function initAudio() {
+            if (audioCtx) return;
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             
-            for (const file of newFiles) {
-                if (!file.type.startsWith('audio/')) continue;
-                playlist.push({ 
-                    file, 
-                    metadata: { 
-                        title: file.name.replace(/\.[^/.]+$/, ""), 
-                        artist: "Arxiu local", 
-                        art: null 
-                    } 
-                });
-            }
+            // Creem els nodes
+            sourceNode = audioCtx.createMediaElementSource(audioEl);
+            analyserL = audioCtx.createAnalyser();
+            analyserR = audioCtx.createAnalyser();
+            analyserL.fftSize = 128;
+            analyserR.fftSize = 128;
+            
+            const splitter = audioCtx.createChannelSplitter(2);
+            
+            // Connectem: Audio -> Splitter -> Analitzadors -> Merged -> Destination
+            sourceNode.connect(splitter);
+            splitter.connect(analyserL, 0);
+            splitter.connect(analyserR, 1);
+            sourceNode.connect(audioCtx.destination);
+            
+            dataL = new Uint8Array(analyserL.frequencyBinCount);
+            dataR = new Uint8Array(analyserR.frequencyBinCount);
+            
+            render();
+        }
+
+        audioInput.onchange = (e) => {
+            const files = Array.from(e.target.files);
+            if (files.length === 0) return;
+            
+            const wasEmpty = playlist.length === 0;
+            files.forEach(file => {
+                if (file.type.startsWith('audio/')) {
+                    playlist.push({ file, title: file.name.replace(/\.[^/.]+$/, "") });
+                }
+            });
             
             updateQueueUI();
-            if (wasEmpty && playlist.length > 0) playTrack(0);
-        }
+            if (wasEmpty) playTrack(0);
+        };
 
         function updateQueueUI() {
             queueElement.innerHTML = '';
@@ -336,181 +342,119 @@
                 const div = document.createElement('div');
                 div.className = `queue-item ${index === currentIndex ? 'active' : ''}`;
                 div.onclick = (e) => { e.stopPropagation(); playTrack(index); };
-                
-                const artDiv = document.createElement('div');
-                artDiv.className = 'queue-art';
-                artDiv.style.background = 'linear-gradient(45deg, #222, #444)';
-                
-                const details = document.createElement('div');
-                details.className = 'queue-details';
-                details.innerHTML = `<span class="queue-name">${item.metadata.title}</span>`;
-                
-                div.appendChild(artDiv);
-                div.appendChild(details);
+                div.innerHTML = `
+                    <div class="queue-art" style="background: linear-gradient(45deg, #222, #444)"></div>
+                    <div class="queue-details"><span class="queue-name">${item.title}</span></div>
+                `;
                 queueElement.appendChild(div);
             });
         }
 
-        async function playTrack(index) {
+        function playTrack(index) {
             if (index < 0 || index >= playlist.length) return;
+            initAudio();
             
-            if (!audioCtx) initAudioNodes();
-            if (audioCtx.state === 'suspended') await audioCtx.resume();
-
-            stopCurrent();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
 
             currentIndex = index;
             const track = playlist[index];
             
-            trackName.textContent = "Carregant...";
-            trackArtist.textContent = track.metadata.title;
-            trackArt.innerHTML = '<div class="loading-spinner"></div>';
+            // Alliberar URL anterior per evitar fuites de memòria
+            if (audioEl.src) URL.revokeObjectURL(audioEl.src);
+            
+            // Crear URL temporal de l'arxiu
+            audioEl.src = URL.createObjectURL(track.file);
+            
+            trackName.textContent = track.title;
+            trackArtist.textContent = "Reproduint...";
             updateQueueUI();
 
-            try {
-                const arrayBuffer = await track.file.arrayBuffer();
-                audioCtx.decodeAudioData(arrayBuffer, (buffer) => {
-                    currentBuffer = buffer;
-                    pauseOffset = 0;
-                    trackName.textContent = track.metadata.title;
-                    trackArtist.textContent = track.metadata.artist;
-                    trackArt.innerHTML = '';
-                    trackArt.style.backgroundImage = 'linear-gradient(45deg, #111, #444)';
-                    startPlayback();
-                    hideTimeout = setTimeout(() => togglePlaylist(false), 4000);
-                }, (err) => {
-                    console.error("Error descodificant àudio:", err);
-                    trackName.textContent = "Error de format";
-                    trackArt.innerHTML = '⚠️';
-                });
-            } catch (e) {
-                console.error("Error en processar el fitxer:", e);
-                trackName.textContent = "Error en llegir fitxer";
-            }
+            audioEl.play().catch(err => {
+                console.error("Error en reproduir:", err);
+                trackName.textContent = "Error de reproducció";
+            });
+
+            hideTimeout = setTimeout(() => togglePlaylist(false), 5000);
         }
 
-        function startPlayback() {
-            if (!currentBuffer) return;
-            
-            audioSource = audioCtx.createBufferSource();
-            audioSource.buffer = currentBuffer;
-            audioSource.connect(audioCtx.destination);
-            
-            const splitter = audioCtx.createChannelSplitter(2);
-            audioSource.connect(splitter);
-            splitter.connect(analyserL, 0);
-            splitter.connect(analyserR, 1);
-            
-            audioSource.onended = () => {
-                if (isPlaying && (audioCtx.currentTime - startTime) >= currentBuffer.duration - 0.1) {
-                    nextBtn.click();
-                }
-            };
-
-            startTime = audioCtx.currentTime - pauseOffset;
-            audioSource.start(0, pauseOffset);
-            isPlaying = true;
-            updatePlayIcons();
-        }
-
-        function stopCurrent() {
-            if (audioSource) {
-                try { audioSource.stop(); } catch(e) {}
-                audioSource.disconnect();
-                audioSource = null;
-            }
-            isPlaying = false;
-        }
-
-        function updatePlayIcons() {
-            playIcon.style.display = isPlaying ? 'none' : 'block';
-            pauseIcon.style.display = isPlaying ? 'block' : 'none';
-        }
-
-        function initAudioNodes() {
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            analyserL = audioCtx.createAnalyser();
-            analyserR = audioCtx.createAnalyser();
-            analyserL.fftSize = 128;
-            analyserR.fftSize = 128;
-            dataL = new Uint8Array(analyserL.frequencyBinCount);
-            dataR = new Uint8Array(analyserR.frequencyBinCount);
-            render();
-        }
-
-        playPauseBtn.onclick = async (e) => {
-            e.stopPropagation();
-            if (!currentBuffer) return;
-            
-            if (isPlaying) {
-                pauseOffset = audioCtx.currentTime - startTime;
-                stopCurrent();
-            } else {
-                startPlayback();
-            }
-            updatePlayIcons();
+        audioEl.onplay = () => {
+            playIcon.style.display = 'none';
+            pauseIcon.style.display = 'block';
         };
 
-        prevBtn.onclick = (e) => {
-            e.stopPropagation();
-            if (pauseOffset > 3) {
-                pauseOffset = 0;
-                if (isPlaying) { stopCurrent(); startPlayback(); }
-            } else if (currentIndex > 0) {
-                playTrack(currentIndex - 1);
-            }
+        audioEl.onpause = () => {
+            playIcon.style.display = 'block';
+            pauseIcon.style.display = 'none';
         };
 
-        nextBtn.onclick = (e) => {
+        audioEl.onended = () => {
+            if (currentIndex < playlist.length - 1) playTrack(currentIndex + 1);
+        };
+
+        playPauseBtn.onclick = (e) => {
+            e.stopPropagation();
+            if (audioEl.paused) audioEl.play();
+            else audioEl.pause();
+        };
+
+        document.getElementById('prev-btn').onclick = (e) => {
+            e.stopPropagation();
+            if (audioEl.currentTime > 3) audioEl.currentTime = 0;
+            else if (currentIndex > 0) playTrack(currentIndex - 1);
+        };
+
+        document.getElementById('next-btn').onclick = (e) => {
             e.stopPropagation();
             if (currentIndex < playlist.length - 1) playTrack(currentIndex + 1);
         };
 
         function render() {
             requestAnimationFrame(render);
-            if (analyserL && analyserR && isPlaying) {
+            
+            if (analyserL && !audioEl.paused) {
                 analyserL.getByteFrequencyData(dataL);
                 analyserR.getByteFrequencyData(dataR);
+                
                 let bassL = (dataL[0] + dataL[1] + dataL[2]) / 765;
                 let bassR = (dataR[0] + dataR[1] + dataR[2]) / 765;
+                
                 smoothL += (bassL - smoothL) * 0.15;
                 smoothR += (bassR - smoothR) * 0.15;
                 smoothC = (smoothL + smoothR) * 0.5;
-                hue = (hue + 0.15 + (smoothC * 0.6)) % 360; 
+                hue = (hue + 0.2 + (smoothC * 0.8)) % 360;
             } else {
                 smoothL *= 0.9; smoothR *= 0.9; smoothC *= 0.9;
             }
+
             updateClock();
             
+            // Fons negre base
             ctx.globalCompositeOperation = 'source-over';
             ctx.fillStyle = '#000';
             ctx.fillRect(0, 0, w, h);
             
+            // Brillantor d'Ambilight
             ctx.globalCompositeOperation = 'lighter';
-            const baseFade = Math.min(w, h) * 0.12;
+            const baseFade = Math.min(w, h) * 0.15;
             
             const drawGlow = (x, y, width, height, hueVal, smoothVal) => {
                 const grad = ctx.createLinearGradient(x, y, x + (width === w ? 0 : width), y + (height === h ? 0 : height));
-                grad.addColorStop(0, `hsla(${hueVal}, 100%, 45%, ${0.1 + smoothVal * 0.6})`);
+                const alpha = 0.1 + smoothVal * 0.7;
+                grad.addColorStop(0, `hsla(${hueVal}, 100%, 50%, ${alpha})`);
                 grad.addColorStop(1, 'transparent');
                 ctx.fillStyle = grad;
                 ctx.fillRect(x, y, width, height);
             };
 
-            const sL = baseFade + (smoothL * baseFade * 1.8);
-            drawGlow(0, 0, sL, h, hue, smoothL);
+            drawGlow(0, 0, baseFade + (smoothL * baseFade * 2), h, hue, smoothL); // Esquerra
+            drawGlow(w - (baseFade + (smoothR * baseFade * 2)), 0, baseFade + (smoothR * baseFade * 2), h, (hue + 180) % 360, smoothR); // Dreta
+            
+            const verticalGlow = baseFade + (smoothC * baseFade);
+            drawGlow(0, 0, w, verticalGlow, (hue + 90) % 360, smoothC); // Dalt
+            drawGlow(0, h - verticalGlow, w, verticalGlow, (hue + 270) % 360, smoothC); // Baix
 
-            const sR = baseFade + (smoothR * baseFade * 1.8);
-            drawGlow(w - sR, 0, sR, h, (hue + 180) % 360, smoothR);
-
-            const sC = baseFade + (smoothC * baseFade * 1.2);
-            drawGlow(0, 0, w, sC, (hue + 90) % 360, smoothC);
-            drawGlow(0, h - sC, w, sC, (hue + 270) % 360, smoothC);
-
-            clockElement.style.transform = `scale(${1 + (smoothC * 0.08)})`;
+            clockElement.style.transform = `scale(${1 + (smoothC * 0.1)})`;
         }
-
-        audioInput.onchange = (e) => { if (e.target.files.length > 0) handleFiles(e.target.files); };
 
         window.onclick = async (e) => {
             if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
