@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ambilight Visualizer - Apple Style Playlist</title>
+    <title>Ambilight Visualizer - Pro Sound Engine</title>
     <style>
         :root {
             --bg-color: #000;
@@ -37,7 +37,6 @@
             text-align: center;
             pointer-events: none;
             transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
-            will-change: transform;
         }
 
         body.playlist-active #ui-layer {
@@ -51,7 +50,6 @@
             letter-spacing: -2px;
             font-variant-numeric: tabular-nums;
             text-shadow: 0 0 40px rgba(0, 0, 0, 1);
-            will-change: transform;
         }
 
         #playlist-container {
@@ -69,9 +67,8 @@
             border: 1px solid var(--apple-border);
             padding: 20px;
             pointer-events: auto;
-            transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.4s;
+            transition: all 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
             box-shadow: 0 25px 50px rgba(0,0,0,0.6);
-            opacity: 1;
         }
 
         #playlist-container.minimized {
@@ -92,36 +89,12 @@
             height: 60px;
             border-radius: 12px;
             background: linear-gradient(45deg, #333, #555);
-            flex-shrink: 0;
             box-shadow: 0 8px 16px rgba(0,0,0,0.4);
-            display: flex;
-            align-items: center;
-            justify-content: center;
         }
 
-        #track-info {
-            text-align: left;
-            overflow: hidden;
-            flex-grow: 1;
-        }
-
-        #track-name {
-            color: white;
-            font-weight: 600;
-            font-size: 1rem;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            margin-bottom: 2px;
-        }
-
-        #track-artist {
-            color: rgba(255, 255, 255, 0.5);
-            font-size: 0.85rem;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
+        #track-info { text-align: left; overflow: hidden; flex-grow: 1; }
+        #track-name { color: white; font-weight: 600; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #track-artist { color: rgba(255, 255, 255, 0.5); font-size: 0.85rem; }
 
         #player-controls {
             display: flex;
@@ -136,29 +109,19 @@
             border: none;
             cursor: pointer;
             padding: 10px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: background 0.2s, transform 0.1s;
             color: white;
+            transition: transform 0.1s;
         }
 
-        .control-btn:hover { background: var(--apple-active); }
         .control-btn:active { transform: scale(0.92); }
         .control-btn svg { width: 24px; height: 24px; fill: currentColor; }
-        .play-pause-btn svg { width: 32px; height: 32px; }
 
         #queue {
             max-height: 140px;
             overflow-y: auto;
             border-top: 1px solid var(--apple-border);
             padding-top: 10px;
-            mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
         }
-
-        #queue::-webkit-scrollbar { width: 3px; }
-        #queue::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 10px; }
 
         .queue-item {
             display: flex;
@@ -167,18 +130,10 @@
             padding: 10px;
             border-radius: 12px;
             cursor: pointer;
-            transition: background 0.2s;
         }
 
-        .queue-item:hover { background: rgba(255, 255, 255, 0.05); }
         .queue-item.active { background: rgba(255, 255, 255, 0.1); }
-
-        .queue-art {
-            width: 34px;
-            height: 34px;
-            border-radius: 6px;
-            background: #222;
-        }
+        .queue-name { color: #fff; font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
         #upload-label {
             display: block;
@@ -186,13 +141,9 @@
             text-align: center;
             color: rgba(255, 255, 255, 0.4);
             font-size: 0.75rem;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 1px;
             cursor: pointer;
         }
 
-        #upload-label:hover { color: white; }
         input[type="file"] { display: none; }
     </style>
 </head>
@@ -204,35 +155,28 @@
         <div id="clock">00:00:00</div>
     </div>
 
-    <!-- Contenidor per l'àudio dinàmic -->
-    <div id="audio-container"></div>
-
     <div id="playlist-container">
         <div id="current-track">
             <div id="track-art"></div>
             <div id="track-info">
                 <div id="track-name">Sense música</div>
-                <div id="track-artist">Selecciona arxius</div>
+                <div id="track-artist">Carrega els teus MP3</div>
             </div>
         </div>
 
         <div id="player-controls">
-            <button class="control-btn" id="prev-btn">
-                <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
-            </button>
-            <button class="control-btn play-pause-btn" id="play-pause-btn">
+            <button class="control-btn" id="prev-btn"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button>
+            <button class="control-btn" id="play-pause-btn">
                 <svg id="play-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                 <svg id="pause-icon" viewBox="0 0 24 24" style="display:none;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
             </button>
-            <button class="control-btn" id="next-btn">
-                <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
-            </button>
+            <button class="control-btn" id="next-btn"><svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg></button>
         </div>
 
         <div id="queue"></div>
 
         <label id="upload-label">
-            + Afegir Música
+            + Afegir Música (MP3/WAV)
             <input type="file" id="audio-input" accept="audio/*" multiple>
         </label>
     </div>
@@ -242,7 +186,6 @@
         const ctx = canvas.getContext('2d', { alpha: false });
         const clockElement = document.getElementById('clock');
         const audioInput = document.getElementById('audio-input');
-        const audioContainer = document.getElementById('audio-container');
         const queueElement = document.getElementById('queue');
         const trackName = document.getElementById('track-name');
         const trackArtist = document.getElementById('track-artist');
@@ -251,11 +194,15 @@
         const playIcon = document.getElementById('play-icon');
         const pauseIcon = document.getElementById('pause-icon');
         
-        let audioEl = null;
-        let audioCtx, analyserL, analyserR, dataL, dataR, sourceNode;
+        let audioCtx, analyserL, analyserR, dataL, dataR;
+        let sourceNode = null; // Aquest serà un AudioBufferSourceNode
         let playlist = [];
         let currentIndex = -1;
-        let hideTimeout;
+        let isPlaying = false;
+        let startTime = 0;
+        let pausedAt = 0;
+        let currentBuffer = null;
+
         let smoothL = 0, smoothR = 0, smoothC = 0, hue = 0;
         let w, h;
 
@@ -268,23 +215,10 @@
 
         function updateClock() {
             const now = new Date();
-            clockElement.textContent = 
-                `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+            clockElement.textContent = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
         }
 
-        function togglePlaylist(show) {
-            clearTimeout(hideTimeout);
-            if (show) {
-                playlistContainer.classList.remove('minimized');
-                document.body.classList.add('playlist-active');
-            } else {
-                playlistContainer.classList.add('minimized');
-                document.body.classList.remove('playlist-active');
-            }
-        }
-
-        // Creem l'AudioContext només un cop
-        function setupAudioContext() {
+        function initAudioContext() {
             if (audioCtx) return;
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             analyserL = audioCtx.createAnalyser();
@@ -301,7 +235,7 @@
             if (files.length === 0) return;
             const wasEmpty = playlist.length === 0;
             files.forEach(file => {
-                playlist.push({ file, title: file.name.replace(/\.[^/.]+$/, ""), url: URL.createObjectURL(file) });
+                playlist.push({ file, title: file.name.replace(/\.[^/.]+$/, "") });
             });
             updateQueueUI();
             if (wasEmpty) playTrack(0);
@@ -313,10 +247,7 @@
                 const div = document.createElement('div');
                 div.className = `queue-item ${index === currentIndex ? 'active' : ''}`;
                 div.onclick = (e) => { e.stopPropagation(); playTrack(index); };
-                div.innerHTML = `
-                    <div class="queue-art" style="background: linear-gradient(45deg, #222, #444)"></div>
-                    <div class="queue-details"><span class="queue-name">${item.title}</span></div>
-                `;
+                div.innerHTML = `<div class="queue-name">${item.title}</div>`;
                 queueElement.appendChild(div);
             });
         }
@@ -324,83 +255,96 @@
         async function playTrack(index) {
             if (index < 0 || index >= playlist.length) return;
             
-            setupAudioContext();
+            initAudioContext();
             if (audioCtx.state === 'suspended') await audioCtx.resume();
 
-            // 1. ELIMINAR ELEMENT ANTERIOR (Solució al 404 de memòria)
-            if (audioEl) {
-                audioEl.pause();
-                audioEl.onended = null;
-                audioEl.remove();
-                if (sourceNode) sourceNode.disconnect();
-            }
+            // Aturar el que estigui sonant
+            stopCurrent();
 
             currentIndex = index;
             const track = playlist[index];
             trackName.textContent = track.title;
-            trackArtist.textContent = "Connectant...";
+            trackArtist.textContent = "Descodificant...";
             updateQueueUI();
 
-            // 2. CREAR ELEMENT NOU
-            audioEl = document.createElement('audio');
-            audioEl.crossOrigin = "anonymous";
-            audioEl.src = track.url;
-            audioContainer.appendChild(audioEl);
+            try {
+                // LLEGIR COM ARRAYBUFFER (No URL, No 404)
+                const arrayBuffer = await track.file.arrayBuffer();
+                currentBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+                
+                startBuffer(0);
+                trackArtist.textContent = "Reproduint";
+                isPlaying = true;
+                updateButtons();
+            } catch (err) {
+                console.error("Error descodificant:", err);
+                trackArtist.textContent = "Error de format";
+            }
+        }
 
-            // 3. RE-CONNECTAR NODES
-            sourceNode = audioCtx.createMediaElementSource(audioEl);
+        function startBuffer(offset) {
+            if (!currentBuffer) return;
+            
+            sourceNode = audioCtx.createBufferSource();
+            sourceNode.buffer = currentBuffer;
+
             const splitter = audioCtx.createChannelSplitter(2);
             sourceNode.connect(splitter);
             splitter.connect(analyserL, 0);
             splitter.connect(analyserR, 1);
             sourceNode.connect(audioCtx.destination);
 
-            audioEl.onplay = () => {
-                playIcon.style.display = 'none';
-                pauseIcon.style.display = 'block';
-                trackArtist.textContent = "Reproduint";
-            };
-            audioEl.onpause = () => {
-                playIcon.style.display = 'block';
-                pauseIcon.style.display = 'none';
-            };
-            audioEl.onended = () => {
-                if (currentIndex < playlist.length - 1) playTrack(currentIndex + 1);
-            };
-            audioEl.onerror = () => {
-                console.error("Error en l'element d'àudio");
-                trackArtist.textContent = "Format no suportat";
+            sourceNode.onended = () => {
+                if (isPlaying && (audioCtx.currentTime - startTime) >= currentBuffer.duration - 0.1) {
+                    if (currentIndex < playlist.length - 1) playTrack(currentIndex + 1);
+                    else stopCurrent();
+                }
             };
 
-            try {
-                await audioEl.play();
-            } catch (err) {
-                console.error("Falla el play:", err);
-            }
-
-            hideTimeout = setTimeout(() => togglePlaylist(false), 5000);
+            startTime = audioCtx.currentTime - offset;
+            sourceNode.start(0, offset);
         }
 
-        playPauseBtn.onclick = async (e) => {
+        function stopCurrent() {
+            if (sourceNode) {
+                sourceNode.stop();
+                sourceNode.disconnect();
+                sourceNode = null;
+            }
+            isPlaying = false;
+            updateButtons();
+        }
+
+        function updateButtons() {
+            playIcon.style.display = isPlaying ? 'none' : 'block';
+            pauseIcon.style.display = isPlaying ? 'block' : 'none';
+        }
+
+        playPauseBtn.onclick = (e) => {
             e.stopPropagation();
-            if (!audioEl && playlist.length > 0) { playTrack(0); return; }
-            if (audioEl.paused) audioEl.play(); else audioEl.pause();
+            if (!currentBuffer) return;
+
+            if (isPlaying) {
+                pausedAt = audioCtx.currentTime - startTime;
+                stopCurrent();
+            } else {
+                startBuffer(pausedAt);
+                isPlaying = true;
+                updateButtons();
+            }
         };
 
-        document.getElementById('prev-btn').onclick = (e) => {
-            e.stopPropagation();
-            if (audioEl && audioEl.currentTime > 3) audioEl.currentTime = 0;
-            else if (currentIndex > 0) playTrack(currentIndex - 1);
-        };
-
-        document.getElementById('next-btn').onclick = (e) => {
-            e.stopPropagation();
+        document.getElementById('next-btn').onclick = () => {
             if (currentIndex < playlist.length - 1) playTrack(currentIndex + 1);
+        };
+
+        document.getElementById('prev-btn').onclick = () => {
+            if (currentIndex > 0) playTrack(currentIndex - 1);
         };
 
         function render() {
             requestAnimationFrame(render);
-            if (analyserL && audioEl && !audioEl.paused) {
+            if (analyserL && isPlaying) {
                 analyserL.getByteFrequencyData(dataL);
                 analyserR.getByteFrequencyData(dataR);
                 let bL = (dataL[0] + dataL[1] + dataL[2]) / 765;
@@ -436,14 +380,15 @@
             clockElement.style.transform = `scale(${1 + (smoothC * 0.1)})`;
         }
 
-        window.onclick = async (e) => {
-            if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
-            if (!playlistContainer.contains(e.target)) togglePlaylist(playlistContainer.classList.contains('minimized'));
+        window.onclick = (e) => {
+            if (!playlistContainer.contains(e.target)) {
+                playlistContainer.classList.toggle('minimized');
+                document.body.classList.toggle('playlist-active');
+            }
         };
 
         setInterval(updateClock, 1000);
         updateClock();
-        togglePlaylist(true);
     </script>
 </body>
 </html>
