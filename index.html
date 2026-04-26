@@ -145,6 +145,8 @@
         }
 
         input[type="file"] { display: none; }
+        
+        #hidden-audio-container { display: none; }
     </style>
 </head>
 <body>
@@ -154,6 +156,8 @@
     <div id="ui-layer">
         <div id="clock">00:00:00</div>
     </div>
+
+    <div id="hidden-audio-container"></div>
 
     <div id="playlist-container">
         <div id="current-track">
@@ -176,7 +180,7 @@
         <div id="queue"></div>
 
         <label id="upload-label">
-            + Afegir Música (MP3/WAV)
+            + Afegir Música (Universal MP3)
             <input type="file" id="audio-input" accept="audio/*" multiple>
         </label>
     </div>
@@ -193,16 +197,14 @@
         const playPauseBtn = document.getElementById('play-pause-btn');
         const playIcon = document.getElementById('play-icon');
         const pauseIcon = document.getElementById('pause-icon');
+        const audioContainer = document.getElementById('hidden-audio-container');
         
         let audioCtx, analyserL, analyserR, dataL, dataR;
+        let audioEl = null;
         let sourceNode = null; 
         let playlist = [];
         let currentIndex = -1;
-        let isPlaying = false;
-        let startTime = 0;
-        let pausedAt = 0;
-        let currentBuffer = null;
-
+        
         let smoothL = 0, smoothR = 0, smoothC = 0, hue = 0;
         let w, h;
 
@@ -235,7 +237,11 @@
             if (files.length === 0) return;
             const wasEmpty = playlist.length === 0;
             files.forEach(file => {
-                playlist.push({ file, title: file.name.replace(/\.[^/.]+$/, "") });
+                playlist.push({ 
+                    file, 
+                    title: file.name.replace(/\.[^/.]+$/, ""),
+                    url: URL.createObjectURL(file) 
+                });
             });
             updateQueueUI();
             if (wasEmpty) playTrack(0);
@@ -258,88 +264,63 @@
             initAudioContext();
             if (audioCtx.state === 'suspended') await audioCtx.resume();
 
-            stopCurrent();
+            // Neteja total de l'element anterior per evitar 404 i errors de memòria
+            if (audioEl) {
+                audioEl.pause();
+                audioEl.src = "";
+                audioEl.load();
+                audioEl.remove();
+            }
 
             currentIndex = index;
             const track = playlist[index];
             trackName.textContent = track.title;
-            trackArtist.textContent = "Llegint fitxer...";
+            trackArtist.textContent = "Preparant reproductor...";
             updateQueueUI();
 
-            try {
-                const arrayBuffer = await track.file.arrayBuffer();
-                trackArtist.textContent = "Descodificant...";
+            // Creem un element d'àudio nou: l'estratègia més compatible del món
+            audioEl = document.createElement('audio');
+            audioEl.crossOrigin = "anonymous";
+            audioEl.src = track.url;
+            audioContainer.appendChild(audioEl);
+
+            audioEl.oncanplay = () => {
+                if (sourceNode) sourceNode.disconnect();
                 
-                // Intentem descodificar. Si falla, anirà al catch.
-                audioCtx.decodeAudioData(arrayBuffer, (buffer) => {
-                    currentBuffer = buffer;
-                    startBuffer(0);
-                    trackArtist.textContent = "Reproduint";
-                    isPlaying = true;
-                    updateButtons();
-                }, (err) => {
-                    console.error("Error Encoding:", err);
-                    trackArtist.textContent = "Format no compatible";
-                    isPlaying = false;
-                    updateButtons();
-                });
-
-            } catch (err) {
-                console.error("Error de lectura:", err);
-                trackArtist.textContent = "Error de fitxer";
-            }
-        }
-
-        function startBuffer(offset) {
-            if (!currentBuffer) return;
-            
-            sourceNode = audioCtx.createBufferSource();
-            sourceNode.buffer = currentBuffer;
-
-            const splitter = audioCtx.createChannelSplitter(2);
-            sourceNode.connect(splitter);
-            splitter.connect(analyserL, 0);
-            splitter.connect(analyserR, 1);
-            sourceNode.connect(audioCtx.destination);
-
-            sourceNode.onended = () => {
-                if (isPlaying && (audioCtx.currentTime - startTime) >= currentBuffer.duration - 0.1) {
-                    if (currentIndex < playlist.length - 1) playTrack(currentIndex + 1);
-                    else stopCurrent();
-                }
+                // Connectem el motor de visualització a l'element d'àudio
+                sourceNode = audioCtx.createMediaElementSource(audioEl);
+                const splitter = audioCtx.createChannelSplitter(2);
+                sourceNode.connect(splitter);
+                splitter.connect(analyserL, 0);
+                splitter.connect(analyserR, 1);
+                sourceNode.connect(audioCtx.destination);
+                
+                audioEl.play().catch(console.error);
+                trackArtist.textContent = "Reproduint (Mode Universal)";
+                updateButtons();
             };
 
-            startTime = audioCtx.currentTime - offset;
-            sourceNode.start(0, offset);
-        }
+            audioEl.onerror = () => {
+                trackArtist.textContent = "Error en llegir MP3";
+                console.error("Error d'àudio HTML5");
+            };
 
-        function stopCurrent() {
-            if (sourceNode) {
-                try { sourceNode.stop(); } catch(e) {}
-                sourceNode.disconnect();
-                sourceNode = null;
-            }
-            isPlaying = false;
-            updateButtons();
+            audioEl.onended = () => {
+                if (currentIndex < playlist.length - 1) playTrack(currentIndex + 1);
+            };
         }
 
         function updateButtons() {
+            const isPlaying = audioEl && !audioEl.paused;
             playIcon.style.display = isPlaying ? 'none' : 'block';
             pauseIcon.style.display = isPlaying ? 'block' : 'none';
         }
 
         playPauseBtn.onclick = (e) => {
             e.stopPropagation();
-            if (!currentBuffer) return;
-
-            if (isPlaying) {
-                pausedAt = audioCtx.currentTime - startTime;
-                stopCurrent();
-            } else {
-                startBuffer(pausedAt);
-                isPlaying = true;
-                updateButtons();
-            }
+            if (!audioEl) return;
+            if (audioEl.paused) audioEl.play(); else audioEl.pause();
+            setTimeout(updateButtons, 50);
         };
 
         document.getElementById('next-btn').onclick = () => {
@@ -352,6 +333,7 @@
 
         function render() {
             requestAnimationFrame(render);
+            const isPlaying = audioEl && !audioEl.paused;
             if (analyserL && isPlaying) {
                 analyserL.getByteFrequencyData(dataL);
                 analyserR.getByteFrequencyData(dataR);
