@@ -197,15 +197,6 @@
 
         #upload-label:hover { color: white; }
         input[type="file"] { display: none; }
-
-        .loading-spinner {
-            width: 20px; height: 20px;
-            border: 2px solid rgba(255,255,255,0.3);
-            border-top-color: white;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -216,8 +207,7 @@
         <div id="clock">00:00:00</div>
     </div>
 
-    <!-- Element àudio amb controls per defecte desactivats -->
-    <audio id="audio-element" crossorigin="anonymous" preload="auto"></audio>
+    <audio id="audio-element" crossorigin="anonymous"></audio>
 
     <div id="playlist-container">
         <div id="current-track">
@@ -317,7 +307,7 @@
                 
                 render();
             } catch (e) {
-                console.error("No s'ha pogut inicialitzar el context d'àudio:", e);
+                console.error("AudioContext error:", e);
             }
         }
 
@@ -327,9 +317,7 @@
             
             const wasEmpty = playlist.length === 0;
             files.forEach(file => {
-                if (file.type.startsWith('audio/') || file.name.match(/\.(mp3|wav|ogg|m4a|aac)$/i)) {
-                    playlist.push({ file, title: file.name.replace(/\.[^/.]+$/, "") });
-                }
+                playlist.push({ file, title: file.name.replace(/\.[^/.]+$/, "") });
             });
             
             updateQueueUI();
@@ -359,42 +347,35 @@
             currentIndex = index;
             const track = playlist[index];
             
-            // NETEJA ROBUSTA
-            audioEl.pause();
-            if (audioEl.src) {
-                const oldSrc = audioEl.src;
-                audioEl.src = "";
-                audioEl.load(); // Força l'alliberament del recurs anterior
-                URL.revokeObjectURL(oldSrc);
-            }
-            
-            // CARREGA NOVA
-            const blobUrl = URL.createObjectURL(track.file);
-            audioEl.src = blobUrl;
-            
             trackName.textContent = track.title;
             trackArtist.textContent = "Carregant...";
             updateQueueUI();
 
-            // Intentar reproducció
             try {
+                // TÈCNICA ULTRA-ROBUSTA: Llegir com ArrayBuffer per assegurar tipus MIME
+                const arrayBuffer = await track.file.arrayBuffer();
+                const blob = new Blob([arrayBuffer], { type: track.file.type || 'audio/mpeg' });
+                
+                if (audioEl.src) {
+                    URL.revokeObjectURL(audioEl.src);
+                }
+                
+                audioEl.pause();
+                audioEl.removeAttribute('src');
+                audioEl.load();
+                
+                const blobUrl = URL.createObjectURL(blob);
+                audioEl.src = blobUrl;
+                
                 await audioEl.play();
                 trackArtist.textContent = "Reproduint";
             } catch (err) {
-                console.error("Error crític en reproduir:", err);
-                trackName.textContent = "Error de format";
-                trackArtist.textContent = "Format no suportat pel navegador";
+                console.error("Error en carregar/reproduir:", err);
+                trackArtist.textContent = "Error de format";
             }
 
             hideTimeout = setTimeout(() => togglePlaylist(false), 5000);
         }
-
-        // Listener d'error natiu de l'element àudio
-        audioEl.onerror = () => {
-            console.error("Audio Element Error Code:", audioEl.error.code);
-            trackName.textContent = "Error de font";
-            trackArtist.textContent = "El navegador no pot carregar aquest fitxer.";
-        };
 
         audioEl.onplay = () => {
             playIcon.style.display = 'none';
@@ -417,7 +398,6 @@
                 return;
             }
             if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
-            
             if (audioEl.paused) audioEl.play().catch(console.error);
             else audioEl.pause();
         };
@@ -435,16 +415,13 @@
 
         function render() {
             requestAnimationFrame(render);
-            
             if (analyserL && !audioEl.paused) {
                 analyserL.getByteFrequencyData(dataL);
                 analyserR.getByteFrequencyData(dataR);
-                
-                let bassL = (dataL[0] + dataL[1] + dataL[2]) / 765;
-                let bassR = (dataR[0] + dataR[1] + dataR[2]) / 765;
-                
-                smoothL += (bassL - smoothL) * 0.15;
-                smoothR += (bassR - smoothR) * 0.15;
+                let bL = (dataL[0] + dataL[1] + dataL[2]) / 765;
+                let bR = (dataR[0] + dataR[1] + dataR[2]) / 765;
+                smoothL += (bL - smoothL) * 0.15;
+                smoothR += (bR - smoothR) * 0.15;
                 smoothC = (smoothL + smoothR) * 0.5;
                 hue = (hue + 0.2 + (smoothC * 0.8)) % 360;
             } else {
@@ -452,30 +429,25 @@
             }
 
             updateClock();
-            
             ctx.globalCompositeOperation = 'source-over';
             ctx.fillStyle = '#000';
             ctx.fillRect(0, 0, w, h);
             
             ctx.globalCompositeOperation = 'lighter';
             const baseFade = Math.min(w, h) * 0.15;
-            
-            const drawGlow = (x, y, width, height, hueVal, smoothVal) => {
-                const grad = ctx.createLinearGradient(x, y, x + (width === w ? 0 : width), y + (height === h ? 0 : height));
-                const alpha = 0.05 + smoothVal * 0.75;
-                grad.addColorStop(0, `hsla(${hueVal}, 100%, 50%, ${alpha})`);
+            const drawG = (x, y, wi, he, hV, sV) => {
+                const grad = ctx.createLinearGradient(x, y, x + (wi === w ? 0 : wi), y + (he === h ? 0 : he));
+                grad.addColorStop(0, `hsla(${hV}, 100%, 50%, ${0.05 + sV * 0.75})`);
                 grad.addColorStop(1, 'transparent');
                 ctx.fillStyle = grad;
-                ctx.fillRect(x, y, width, height);
+                ctx.fillRect(x, y, wi, he);
             };
 
-            drawGlow(0, 0, baseFade + (smoothL * baseFade * 2), h, hue, smoothL);
-            drawGlow(w - (baseFade + (smoothR * baseFade * 2)), 0, baseFade + (smoothR * baseFade * 2), h, (hue + 180) % 360, smoothR);
-            
-            const verticalGlow = baseFade + (smoothC * baseFade);
-            drawGlow(0, 0, w, verticalGlow, (hue + 90) % 360, smoothC);
-            drawGlow(0, h - verticalGlow, w, verticalGlow, (hue + 270) % 360, smoothC);
-
+            drawG(0, 0, baseFade + (smoothL * baseFade * 2), h, hue, smoothL);
+            drawG(w - (baseFade + (smoothR * baseFade * 2)), 0, baseFade + (smoothR * baseFade * 2), h, (hue + 180) % 360, smoothR);
+            const vG = baseFade + (smoothC * baseFade);
+            drawG(0, 0, w, vG, (hue + 90) % 360, smoothC);
+            drawG(0, h - vG, w, vG, (hue + 270) % 360, smoothC);
             clockElement.style.transform = `scale(${1 + (smoothC * 0.1)})`;
         }
 
