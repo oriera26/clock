@@ -195,7 +195,7 @@
         const pauseIcon = document.getElementById('pause-icon');
         
         let audioCtx, analyserL, analyserR, dataL, dataR;
-        let sourceNode = null; // Aquest serà un AudioBufferSourceNode
+        let sourceNode = null; 
         let playlist = [];
         let currentIndex = -1;
         let isPlaying = false;
@@ -258,27 +258,35 @@
             initAudioContext();
             if (audioCtx.state === 'suspended') await audioCtx.resume();
 
-            // Aturar el que estigui sonant
             stopCurrent();
 
             currentIndex = index;
             const track = playlist[index];
             trackName.textContent = track.title;
-            trackArtist.textContent = "Descodificant...";
+            trackArtist.textContent = "Llegint fitxer...";
             updateQueueUI();
 
             try {
-                // LLEGIR COM ARRAYBUFFER (No URL, No 404)
                 const arrayBuffer = await track.file.arrayBuffer();
-                currentBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+                trackArtist.textContent = "Descodificant...";
                 
-                startBuffer(0);
-                trackArtist.textContent = "Reproduint";
-                isPlaying = true;
-                updateButtons();
+                // Intentem descodificar. Si falla, anirà al catch.
+                audioCtx.decodeAudioData(arrayBuffer, (buffer) => {
+                    currentBuffer = buffer;
+                    startBuffer(0);
+                    trackArtist.textContent = "Reproduint";
+                    isPlaying = true;
+                    updateButtons();
+                }, (err) => {
+                    console.error("Error Encoding:", err);
+                    trackArtist.textContent = "Format no compatible";
+                    isPlaying = false;
+                    updateButtons();
+                });
+
             } catch (err) {
-                console.error("Error descodificant:", err);
-                trackArtist.textContent = "Error de format";
+                console.error("Error de lectura:", err);
+                trackArtist.textContent = "Error de fitxer";
             }
         }
 
@@ -307,7 +315,7 @@
 
         function stopCurrent() {
             if (sourceNode) {
-                sourceNode.stop();
+                try { sourceNode.stop(); } catch(e) {}
                 sourceNode.disconnect();
                 sourceNode = null;
             }
