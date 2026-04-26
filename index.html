@@ -180,9 +180,6 @@
             background: #222;
         }
 
-        .queue-details { display: flex; flex-direction: column; overflow: hidden; }
-        .queue-name { color: #fff; font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
         #upload-label {
             display: block;
             margin-top: 15px;
@@ -207,8 +204,8 @@
         <div id="clock">00:00:00</div>
     </div>
 
-    <!-- Audio element simple -->
-    <audio id="audio-element" crossorigin="anonymous"></audio>
+    <!-- Contenidor per l'àudio dinàmic -->
+    <div id="audio-container"></div>
 
     <div id="playlist-container">
         <div id="current-track">
@@ -245,9 +242,8 @@
         const ctx = canvas.getContext('2d', { alpha: false });
         const clockElement = document.getElementById('clock');
         const audioInput = document.getElementById('audio-input');
-        const audioEl = document.getElementById('audio-element');
+        const audioContainer = document.getElementById('audio-container');
         const queueElement = document.getElementById('queue');
-        const trackArt = document.getElementById('track-art');
         const trackName = document.getElementById('track-name');
         const trackArtist = document.getElementById('track-artist');
         const playlistContainer = document.getElementById('playlist-container');
@@ -255,6 +251,7 @@
         const playIcon = document.getElementById('play-icon');
         const pauseIcon = document.getElementById('pause-icon');
         
+        let audioEl = null;
         let audioCtx, analyserL, analyserR, dataL, dataR, sourceNode;
         let playlist = [];
         let currentIndex = -1;
@@ -286,43 +283,28 @@
             }
         }
 
-        function initAudio() {
+        // Creem l'AudioContext només un cop
+        function setupAudioContext() {
             if (audioCtx) return;
-            try {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                sourceNode = audioCtx.createMediaElementSource(audioEl);
-                
-                analyserL = audioCtx.createAnalyser();
-                analyserR = audioCtx.createAnalyser();
-                analyserL.fftSize = 128;
-                analyserR.fftSize = 128;
-                
-                const splitter = audioCtx.createChannelSplitter(2);
-                sourceNode.connect(splitter);
-                splitter.connect(analyserL, 0);
-                splitter.connect(analyserR, 1);
-                sourceNode.connect(audioCtx.destination);
-                
-                dataL = new Uint8Array(analyserL.frequencyBinCount);
-                dataR = new Uint8Array(analyserR.frequencyBinCount);
-                
-                render();
-            } catch (e) {
-                console.error("AudioContext error:", e);
-            }
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            analyserL = audioCtx.createAnalyser();
+            analyserR = audioCtx.createAnalyser();
+            analyserL.fftSize = 128;
+            analyserR.fftSize = 128;
+            dataL = new Uint8Array(analyserL.frequencyBinCount);
+            dataR = new Uint8Array(analyserR.frequencyBinCount);
+            render();
         }
 
         audioInput.onchange = (e) => {
             const files = Array.from(e.target.files);
             if (files.length === 0) return;
-            
             const wasEmpty = playlist.length === 0;
             files.forEach(file => {
-                playlist.push({ file, title: file.name.replace(/\.[^/.]+$/, "") });
+                playlist.push({ file, title: file.name.replace(/\.[^/.]+$/, ""), url: URL.createObjectURL(file) });
             });
-            
             updateQueueUI();
-            if (wasEmpty && playlist.length > 0) playTrack(0);
+            if (wasEmpty) playTrack(0);
         };
 
         function updateQueueUI() {
@@ -339,75 +321,75 @@
             });
         }
 
-        // Funció per convertir fitxer a DataURL (Base64) - La més robusta contra 404
-        function fileToDataURL(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = (e) => resolve(e.target.result);
-                reader.onerror = (e) => reject(e);
-                reader.readAsDataURL(file);
-            });
-        }
-
         async function playTrack(index) {
             if (index < 0 || index >= playlist.length) return;
             
-            initAudio();
+            setupAudioContext();
             if (audioCtx.state === 'suspended') await audioCtx.resume();
+
+            // 1. ELIMINAR ELEMENT ANTERIOR (Solució al 404 de memòria)
+            if (audioEl) {
+                audioEl.pause();
+                audioEl.onended = null;
+                audioEl.remove();
+                if (sourceNode) sourceNode.disconnect();
+            }
 
             currentIndex = index;
             const track = playlist[index];
-            
             trackName.textContent = track.title;
-            trackArtist.textContent = "Processant...";
+            trackArtist.textContent = "Connectant...";
             updateQueueUI();
 
-            try {
-                // ESTRATÈGIA FINAL: Base64 directe. No pot donar 404 perquè la font és la mateixa string.
-                const dataUrl = await fileToDataURL(track.file);
-                
-                audioEl.pause();
-                audioEl.src = dataUrl;
-                audioEl.load(); // Forçar reconeixement de la nova font
-                
-                await audioEl.play();
+            // 2. CREAR ELEMENT NOU
+            audioEl = document.createElement('audio');
+            audioEl.crossOrigin = "anonymous";
+            audioEl.src = track.url;
+            audioContainer.appendChild(audioEl);
+
+            // 3. RE-CONNECTAR NODES
+            sourceNode = audioCtx.createMediaElementSource(audioEl);
+            const splitter = audioCtx.createChannelSplitter(2);
+            sourceNode.connect(splitter);
+            splitter.connect(analyserL, 0);
+            splitter.connect(analyserR, 1);
+            sourceNode.connect(audioCtx.destination);
+
+            audioEl.onplay = () => {
+                playIcon.style.display = 'none';
+                pauseIcon.style.display = 'block';
                 trackArtist.textContent = "Reproduint";
+            };
+            audioEl.onpause = () => {
+                playIcon.style.display = 'block';
+                pauseIcon.style.display = 'none';
+            };
+            audioEl.onended = () => {
+                if (currentIndex < playlist.length - 1) playTrack(currentIndex + 1);
+            };
+            audioEl.onerror = () => {
+                console.error("Error en l'element d'àudio");
+                trackArtist.textContent = "Format no suportat";
+            };
+
+            try {
+                await audioEl.play();
             } catch (err) {
-                console.error("Error crític en reproduir:", err);
-                trackArtist.textContent = "Error de fitxer";
+                console.error("Falla el play:", err);
             }
 
             hideTimeout = setTimeout(() => togglePlaylist(false), 5000);
         }
 
-        audioEl.onplay = () => {
-            playIcon.style.display = 'none';
-            pauseIcon.style.display = 'block';
-        };
-
-        audioEl.onpause = () => {
-            playIcon.style.display = 'block';
-            pauseIcon.style.display = 'none';
-        };
-
-        audioEl.onended = () => {
-            if (currentIndex < playlist.length - 1) playTrack(currentIndex + 1);
-        };
-
         playPauseBtn.onclick = async (e) => {
             e.stopPropagation();
-            if (!audioEl.src && playlist.length > 0) {
-                playTrack(0);
-                return;
-            }
-            if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
-            if (audioEl.paused) audioEl.play().catch(console.error);
-            else audioEl.pause();
+            if (!audioEl && playlist.length > 0) { playTrack(0); return; }
+            if (audioEl.paused) audioEl.play(); else audioEl.pause();
         };
 
         document.getElementById('prev-btn').onclick = (e) => {
             e.stopPropagation();
-            if (audioEl.currentTime > 3) audioEl.currentTime = 0;
+            if (audioEl && audioEl.currentTime > 3) audioEl.currentTime = 0;
             else if (currentIndex > 0) playTrack(currentIndex - 1);
         };
 
@@ -418,7 +400,7 @@
 
         function render() {
             requestAnimationFrame(render);
-            if (analyserL && !audioEl.paused) {
+            if (analyserL && audioEl && !audioEl.paused) {
                 analyserL.getByteFrequencyData(dataL);
                 analyserR.getByteFrequencyData(dataR);
                 let bL = (dataL[0] + dataL[1] + dataL[2]) / 765;
