@@ -146,7 +146,7 @@
 
         input[type="file"] { display: none; }
         
-        #hidden-audio-container { display: none; }
+        #audio-element-container { display: none; }
     </style>
 </head>
 <body>
@@ -157,7 +157,10 @@
         <div id="clock">00:00:00</div>
     </div>
 
-    <div id="hidden-audio-container"></div>
+    <!-- Utilitzem un sol element d'àudio persistent -->
+    <div id="audio-element-container">
+        <audio id="main-audio" crossOrigin="anonymous"></audio>
+    </div>
 
     <div id="playlist-container">
         <div id="current-track">
@@ -180,7 +183,7 @@
         <div id="queue"></div>
 
         <label id="upload-label">
-            + Afegir Música (Universal MP3)
+            + Afegir Música (Llista de reproducció)
             <input type="file" id="audio-input" accept="audio/*" multiple>
         </label>
     </div>
@@ -197,10 +200,9 @@
         const playPauseBtn = document.getElementById('play-pause-btn');
         const playIcon = document.getElementById('play-icon');
         const pauseIcon = document.getElementById('pause-icon');
-        const audioContainer = document.getElementById('hidden-audio-container');
+        const mainAudio = document.getElementById('main-audio');
         
         let audioCtx, analyserL, analyserR, dataL, dataR;
-        let audioEl = null;
         let sourceNode = null; 
         let playlist = [];
         let currentIndex = -1;
@@ -220,6 +222,7 @@
             clockElement.textContent = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
         }
 
+        // Inicialització única de l'AudioContext i connexió de l'element d'àudio
         function initAudioContext() {
             if (audioCtx) return;
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -229,6 +232,15 @@
             analyserR.fftSize = 128;
             dataL = new Uint8Array(analyserL.frequencyBinCount);
             dataR = new Uint8Array(analyserR.frequencyBinCount);
+
+            // Connectem l'element d'àudio persistent només una vegada
+            sourceNode = audioCtx.createMediaElementSource(mainAudio);
+            const splitter = audioCtx.createChannelSplitter(2);
+            sourceNode.connect(splitter);
+            splitter.connect(analyserL, 0);
+            splitter.connect(analyserR, 1);
+            sourceNode.connect(audioCtx.destination);
+            
             render();
         }
 
@@ -264,62 +276,43 @@
             initAudioContext();
             if (audioCtx.state === 'suspended') await audioCtx.resume();
 
-            // Neteja total de l'element anterior per evitar 404 i errors de memòria
-            if (audioEl) {
-                audioEl.pause();
-                audioEl.src = "";
-                audioEl.load();
-                audioEl.remove();
-            }
-
             currentIndex = index;
             const track = playlist[index];
             trackName.textContent = track.title;
-            trackArtist.textContent = "Preparant reproductor...";
+            trackArtist.textContent = "Carregant pista...";
             updateQueueUI();
 
-            // Creem un element d'àudio nou: l'estratègia més compatible del món
-            audioEl = document.createElement('audio');
-            audioEl.crossOrigin = "anonymous";
-            audioEl.src = track.url;
-            audioContainer.appendChild(audioEl);
-
-            audioEl.oncanplay = () => {
-                if (sourceNode) sourceNode.disconnect();
-                
-                // Connectem el motor de visualització a l'element d'àudio
-                sourceNode = audioCtx.createMediaElementSource(audioEl);
-                const splitter = audioCtx.createChannelSplitter(2);
-                sourceNode.connect(splitter);
-                splitter.connect(analyserL, 0);
-                splitter.connect(analyserR, 1);
-                sourceNode.connect(audioCtx.destination);
-                
-                audioEl.play().catch(console.error);
-                trackArtist.textContent = "Reproduint (Mode Universal)";
+            // Simplement canviem el 'src' de l'element persistent
+            mainAudio.src = track.url;
+            mainAudio.load();
+            
+            mainAudio.play().then(() => {
+                trackArtist.textContent = "Reproduint";
                 updateButtons();
-            };
-
-            audioEl.onerror = () => {
-                trackArtist.textContent = "Error en llegir MP3";
-                console.error("Error d'àudio HTML5");
-            };
-
-            audioEl.onended = () => {
-                if (currentIndex < playlist.length - 1) playTrack(currentIndex + 1);
-            };
+            }).catch(err => {
+                console.error("Error en reproduir:", err);
+                trackArtist.textContent = "Error de reproducció";
+            });
         }
 
+        mainAudio.onended = () => {
+            if (currentIndex < playlist.length - 1) playTrack(currentIndex + 1);
+        };
+
+        mainAudio.onerror = () => {
+            trackArtist.textContent = "Error en el fitxer MP3";
+        };
+
         function updateButtons() {
-            const isPlaying = audioEl && !audioEl.paused;
+            const isPlaying = !mainAudio.paused;
             playIcon.style.display = isPlaying ? 'none' : 'block';
             pauseIcon.style.display = isPlaying ? 'block' : 'none';
         }
 
         playPauseBtn.onclick = (e) => {
             e.stopPropagation();
-            if (!audioEl) return;
-            if (audioEl.paused) audioEl.play(); else audioEl.pause();
+            if (!mainAudio.src) return;
+            if (mainAudio.paused) mainAudio.play(); else mainAudio.pause();
             setTimeout(updateButtons, 50);
         };
 
@@ -333,7 +326,7 @@
 
         function render() {
             requestAnimationFrame(render);
-            const isPlaying = audioEl && !audioEl.paused;
+            const isPlaying = !mainAudio.paused;
             if (analyserL && isPlaying) {
                 analyserL.getByteFrequencyData(dataL);
                 analyserR.getByteFrequencyData(dataR);
