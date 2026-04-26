@@ -4,8 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ambilight Visualizer - Apple Style Playlist</title>
-    <!-- Llibreria per llegir metadades d'àudio (ID3 tags) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
     <style>
         :root {
             --bg-color: #000;
@@ -256,9 +254,12 @@
         const prevBtn = document.getElementById('prev-btn');
         const nextBtn = document.getElementById('next-btn');
         
-        let audioCtx, analyserL, analyserR, dataL, dataR, source;
-        let audio = new Audio();
-        audio.crossOrigin = "anonymous";
+        let audioCtx, analyserL, analyserR, dataL, dataR;
+        let audioSource = null;
+        let isPlaying = false;
+        let startTime = 0;
+        let pauseOffset = 0;
+        let currentBuffer = null;
         
         let playlist = [];
         let currentIndex = -1;
@@ -297,38 +298,18 @@
             const wasEmpty = playlist.length === 0;
             
             for (const file of newFiles) {
-                const metadata = await getMetadata(file);
-                playlist.push({ file, metadata });
+                playlist.push({ 
+                    file, 
+                    metadata: { 
+                        title: file.name.replace(/\.[^/.]+$/, ""), 
+                        artist: "Arxiu local", 
+                        art: null 
+                    } 
+                });
             }
             
             updateQueueUI();
             if (wasEmpty && playlist.length > 0) playTrack(0);
-        }
-
-        function getMetadata(file) {
-            return new Promise((resolve) => {
-                jsmediatags.read(file, {
-                    onSuccess: function(tag) {
-                        let art = null;
-                        if (tag.tags.picture) {
-                            const { data, format } = tag.tags.picture;
-                            let base64String = "";
-                            for (let i = 0; i < data.length; i++) {
-                                base64String += String.fromCharCode(data[i]);
-                            }
-                            art = `data:${format};base64,${window.btoa(base64String)}`;
-                        }
-                        resolve({
-                            title: tag.tags.title || file.name.split('.').slice(0, -1).join('.'),
-                            artist: tag.tags.artist || "Artista desconegut",
-                            art: art
-                        });
-                    },
-                    onError: function() {
-                        resolve({ title: file.name.split('.').slice(0, -1).join('.'), artist: "Artista desconegut", art: null });
-                    }
-                });
-            });
         }
 
         function updateQueueUI() {
@@ -340,8 +321,7 @@
                 
                 const artDiv = document.createElement('div');
                 artDiv.className = 'queue-art';
-                if (item.metadata.art) artDiv.style.backgroundImage = `url(${item.metadata.art})`;
-                else artDiv.style.background = 'linear-gradient(45deg, #222, #444)';
+                artDiv.style.background = 'linear-gradient(45deg, #222, #444)';
                 
                 const details = document.createElement('div');
                 details.className = 'queue-details';
@@ -356,7 +336,12 @@
         async function playTrack(index) {
             if (index < 0 || index >= playlist.length) return;
             
-            if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
+            // Inicialitzar context d'àudio només quan calgui (interacció usuari)
+            if (!audioCtx) initAudioNodes();
+            if (audioCtx.state === 'suspended') await audioCtx.resume();
+
+            // Aturar reproducció actual
+            stopCurrent();
 
             currentIndex = index;
             const track = playlist[index];
@@ -364,69 +349,90 @@
             // UI
             trackName.textContent = track.metadata.title;
             trackArtist.textContent = track.metadata.artist;
-            trackArt.style.backgroundImage = track.metadata.art ? `url(${track.metadata.art})` : 'linear-gradient(45deg, #111, #444)';
+            trackArt.style.backgroundImage = 'linear-gradient(45deg, #111, #444)';
             updateQueueUI();
 
-            // Ús de FileReader per evitar errors de "NotSupportedError" amb Blobs
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                audio.pause();
-                audio.src = e.target.result;
-                audio.load();
-                
-                // Intentar reproduir un cop carregat el DataURL
-                audio.oncanplay = () => {
-                    audio.oncanplay = null;
-                    initAudioNodes();
-                    audio.play().then(() => {
-                        updatePlayIcons();
-                        hideTimeout = setTimeout(() => togglePlaylist(false), 4000);
-                    }).catch(console.error);
-                };
+            // Llegir i descodificar l'àudio directament en memòria (sense src/blob)
+            const arrayBuffer = await track.file.arrayBuffer();
+            audioCtx.decodeAudioData(arrayBuffer, (buffer) => {
+                currentBuffer = buffer;
+                pauseOffset = 0;
+                startPlayback();
+                hideTimeout = setTimeout(() => togglePlaylist(false), 4000);
+            }, (err) => console.error("Error descodificant àudio:", err));
+        }
+
+        function startPlayback() {
+            if (!currentBuffer) return;
+            
+            audioSource = audioCtx.createBufferSource();
+            audioSource.buffer = currentBuffer;
+            audioSource.connect(audioCtx.destination);
+            
+            // Connectar a analitzadors
+            const splitter = audioCtx.createChannelSplitter(2);
+            audioSource.connect(splitter);
+            splitter.connect(analyserL, 0);
+            splitter.connect(analyserR, 1);
+            
+            audioSource.onended = () => {
+                if (isPlaying && (audioCtx.currentTime - startTime) >= currentBuffer.duration - 0.1) {
+                    nextBtn.click();
+                }
             };
-            reader.readAsDataURL(track.file);
+
+            startTime = audioCtx.currentTime - pauseOffset;
+            audioSource.start(0, pauseOffset);
+            isPlaying = true;
+            updatePlayIcons();
+        }
+
+        function stopCurrent() {
+            if (audioSource) {
+                try { audioSource.stop(); } catch(e) {}
+                audioSource.disconnect();
+                audioSource = null;
+            }
+            isPlaying = false;
         }
 
         function updatePlayIcons() {
-            const isPaused = audio.paused;
-            playIcon.style.display = isPaused ? 'block' : 'none';
-            pauseIcon.style.display = isPaused ? 'none' : 'block';
+            playIcon.style.display = isPlaying ? 'none' : 'block';
+            pauseIcon.style.display = isPlaying ? 'block' : 'none';
         }
 
         function initAudioNodes() {
-            if (!audioCtx) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                const splitter = audioCtx.createChannelSplitter(2);
-                analyserL = audioCtx.createAnalyser();
-                analyserR = audioCtx.createAnalyser();
-                analyserL.fftSize = 128;
-                analyserR.fftSize = 128;
-                
-                source = audioCtx.createMediaElementSource(audio);
-                source.connect(splitter);
-                splitter.connect(analyserL, 0);
-                splitter.connect(analyserR, 1);
-                source.connect(audioCtx.destination);
-                
-                dataL = new Uint8Array(analyserL.frequencyBinCount);
-                dataR = new Uint8Array(analyserR.frequencyBinCount);
-                render();
-            }
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            analyserL = audioCtx.createAnalyser();
+            analyserR = audioCtx.createAnalyser();
+            analyserL.fftSize = 128;
+            analyserR.fftSize = 128;
+            dataL = new Uint8Array(analyserL.frequencyBinCount);
+            dataR = new Uint8Array(analyserR.frequencyBinCount);
+            render();
         }
 
         playPauseBtn.onclick = async (e) => {
             e.stopPropagation();
-            if (!audio.src) return;
-            if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
-
-            if (audio.paused) audio.play().then(updatePlayIcons);
-            else { audio.pause(); updatePlayIcons(); }
+            if (!currentBuffer) return;
+            
+            if (isPlaying) {
+                pauseOffset = audioCtx.currentTime - startTime;
+                stopCurrent();
+            } else {
+                startPlayback();
+            }
+            updatePlayIcons();
         };
 
         prevBtn.onclick = (e) => {
             e.stopPropagation();
-            if (audio.currentTime > 3) audio.currentTime = 0;
-            else if (currentIndex > 0) playTrack(currentIndex - 1);
+            if (pauseOffset > 3) {
+                pauseOffset = 0;
+                if (isPlaying) { stopCurrent(); startPlayback(); }
+            } else if (currentIndex > 0) {
+                playTrack(currentIndex - 1);
+            }
         };
 
         nextBtn.onclick = (e) => {
@@ -434,14 +440,9 @@
             if (currentIndex < playlist.length - 1) playTrack(currentIndex + 1);
         };
 
-        audio.onended = () => {
-            if (currentIndex < playlist.length - 1) playTrack(currentIndex + 1);
-            else updatePlayIcons();
-        };
-
         function render() {
             requestAnimationFrame(render);
-            if (analyserL && analyserR) {
+            if (analyserL && analyserR && isPlaying) {
                 analyserL.getByteFrequencyData(dataL);
                 analyserR.getByteFrequencyData(dataR);
                 let bassL = (dataL[0] + dataL[1] + dataL[2]) / 765;
@@ -450,6 +451,8 @@
                 smoothR += (bassR - smoothR) * 0.15;
                 smoothC = (smoothL + smoothR) * 0.5;
                 hue = (hue + 0.15 + (smoothC * 0.6)) % 360; 
+            } else {
+                smoothL *= 0.9; smoothR *= 0.9; smoothC *= 0.9;
             }
             updateClock();
             
