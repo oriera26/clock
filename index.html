@@ -216,8 +216,8 @@
         <div id="clock">00:00:00</div>
     </div>
 
-    <!-- Element àudio ocult: la clau de la robustesa -->
-    <audio id="audio-element" crossorigin="anonymous"></audio>
+    <!-- Element àudio amb controls per defecte desactivats -->
+    <audio id="audio-element" crossorigin="anonymous" preload="auto"></audio>
 
     <div id="playlist-container">
         <div id="current-track">
@@ -295,30 +295,30 @@
             }
         }
 
-        // Inicialització del context d'àudio (NOMÉS UN COP)
         function initAudio() {
             if (audioCtx) return;
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            
-            // Creem els nodes
-            sourceNode = audioCtx.createMediaElementSource(audioEl);
-            analyserL = audioCtx.createAnalyser();
-            analyserR = audioCtx.createAnalyser();
-            analyserL.fftSize = 128;
-            analyserR.fftSize = 128;
-            
-            const splitter = audioCtx.createChannelSplitter(2);
-            
-            // Connectem: Audio -> Splitter -> Analitzadors -> Merged -> Destination
-            sourceNode.connect(splitter);
-            splitter.connect(analyserL, 0);
-            splitter.connect(analyserR, 1);
-            sourceNode.connect(audioCtx.destination);
-            
-            dataL = new Uint8Array(analyserL.frequencyBinCount);
-            dataR = new Uint8Array(analyserR.frequencyBinCount);
-            
-            render();
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                sourceNode = audioCtx.createMediaElementSource(audioEl);
+                
+                analyserL = audioCtx.createAnalyser();
+                analyserR = audioCtx.createAnalyser();
+                analyserL.fftSize = 128;
+                analyserR.fftSize = 128;
+                
+                const splitter = audioCtx.createChannelSplitter(2);
+                sourceNode.connect(splitter);
+                splitter.connect(analyserL, 0);
+                splitter.connect(analyserR, 1);
+                sourceNode.connect(audioCtx.destination);
+                
+                dataL = new Uint8Array(analyserL.frequencyBinCount);
+                dataR = new Uint8Array(analyserR.frequencyBinCount);
+                
+                render();
+            } catch (e) {
+                console.error("No s'ha pogut inicialitzar el context d'àudio:", e);
+            }
         }
 
         audioInput.onchange = (e) => {
@@ -327,13 +327,13 @@
             
             const wasEmpty = playlist.length === 0;
             files.forEach(file => {
-                if (file.type.startsWith('audio/')) {
+                if (file.type.startsWith('audio/') || file.name.match(/\.(mp3|wav|ogg|m4a|aac)$/i)) {
                     playlist.push({ file, title: file.name.replace(/\.[^/.]+$/, "") });
                 }
             });
             
             updateQueueUI();
-            if (wasEmpty) playTrack(0);
+            if (wasEmpty && playlist.length > 0) playTrack(0);
         };
 
         function updateQueueUI() {
@@ -350,32 +350,51 @@
             });
         }
 
-        function playTrack(index) {
+        async function playTrack(index) {
             if (index < 0 || index >= playlist.length) return;
-            initAudio();
             
-            if (audioCtx.state === 'suspended') audioCtx.resume();
+            initAudio();
+            if (audioCtx.state === 'suspended') await audioCtx.resume();
 
             currentIndex = index;
             const track = playlist[index];
             
-            // Alliberar URL anterior per evitar fuites de memòria
-            if (audioEl.src) URL.revokeObjectURL(audioEl.src);
+            // NETEJA ROBUSTA
+            audioEl.pause();
+            if (audioEl.src) {
+                const oldSrc = audioEl.src;
+                audioEl.src = "";
+                audioEl.load(); // Força l'alliberament del recurs anterior
+                URL.revokeObjectURL(oldSrc);
+            }
             
-            // Crear URL temporal de l'arxiu
-            audioEl.src = URL.createObjectURL(track.file);
+            // CARREGA NOVA
+            const blobUrl = URL.createObjectURL(track.file);
+            audioEl.src = blobUrl;
             
             trackName.textContent = track.title;
-            trackArtist.textContent = "Reproduint...";
+            trackArtist.textContent = "Carregant...";
             updateQueueUI();
 
-            audioEl.play().catch(err => {
-                console.error("Error en reproduir:", err);
-                trackName.textContent = "Error de reproducció";
-            });
+            // Intentar reproducció
+            try {
+                await audioEl.play();
+                trackArtist.textContent = "Reproduint";
+            } catch (err) {
+                console.error("Error crític en reproduir:", err);
+                trackName.textContent = "Error de format";
+                trackArtist.textContent = "Format no suportat pel navegador";
+            }
 
             hideTimeout = setTimeout(() => togglePlaylist(false), 5000);
         }
+
+        // Listener d'error natiu de l'element àudio
+        audioEl.onerror = () => {
+            console.error("Audio Element Error Code:", audioEl.error.code);
+            trackName.textContent = "Error de font";
+            trackArtist.textContent = "El navegador no pot carregar aquest fitxer.";
+        };
 
         audioEl.onplay = () => {
             playIcon.style.display = 'none';
@@ -391,9 +410,15 @@
             if (currentIndex < playlist.length - 1) playTrack(currentIndex + 1);
         };
 
-        playPauseBtn.onclick = (e) => {
+        playPauseBtn.onclick = async (e) => {
             e.stopPropagation();
-            if (audioEl.paused) audioEl.play();
+            if (!audioEl.src && playlist.length > 0) {
+                playTrack(0);
+                return;
+            }
+            if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
+            
+            if (audioEl.paused) audioEl.play().catch(console.error);
             else audioEl.pause();
         };
 
@@ -428,30 +453,28 @@
 
             updateClock();
             
-            // Fons negre base
             ctx.globalCompositeOperation = 'source-over';
             ctx.fillStyle = '#000';
             ctx.fillRect(0, 0, w, h);
             
-            // Brillantor d'Ambilight
             ctx.globalCompositeOperation = 'lighter';
             const baseFade = Math.min(w, h) * 0.15;
             
             const drawGlow = (x, y, width, height, hueVal, smoothVal) => {
                 const grad = ctx.createLinearGradient(x, y, x + (width === w ? 0 : width), y + (height === h ? 0 : height));
-                const alpha = 0.1 + smoothVal * 0.7;
+                const alpha = 0.05 + smoothVal * 0.75;
                 grad.addColorStop(0, `hsla(${hueVal}, 100%, 50%, ${alpha})`);
                 grad.addColorStop(1, 'transparent');
                 ctx.fillStyle = grad;
                 ctx.fillRect(x, y, width, height);
             };
 
-            drawGlow(0, 0, baseFade + (smoothL * baseFade * 2), h, hue, smoothL); // Esquerra
-            drawGlow(w - (baseFade + (smoothR * baseFade * 2)), 0, baseFade + (smoothR * baseFade * 2), h, (hue + 180) % 360, smoothR); // Dreta
+            drawGlow(0, 0, baseFade + (smoothL * baseFade * 2), h, hue, smoothL);
+            drawGlow(w - (baseFade + (smoothR * baseFade * 2)), 0, baseFade + (smoothR * baseFade * 2), h, (hue + 180) % 360, smoothR);
             
             const verticalGlow = baseFade + (smoothC * baseFade);
-            drawGlow(0, 0, w, verticalGlow, (hue + 90) % 360, smoothC); // Dalt
-            drawGlow(0, h - verticalGlow, w, verticalGlow, (hue + 270) % 360, smoothC); // Baix
+            drawGlow(0, 0, w, verticalGlow, (hue + 90) % 360, smoothC);
+            drawGlow(0, h - verticalGlow, w, verticalGlow, (hue + 270) % 360, smoothC);
 
             clockElement.style.transform = `scale(${1 + (smoothC * 0.1)})`;
         }
