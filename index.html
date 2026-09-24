@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>World Clock</title>
+<title>Rellotge Mundial · Virolai</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
@@ -24,6 +24,18 @@ body.alt {
 }
 
 html, body { margin: 0; padding: 0; width: 100%; }
+
+/* ==== OCULTAR BARRA DE SCROLL (mantenint el scroll) ==== */
+html {
+    scrollbar-width: none;          /* Firefox */
+    -ms-overflow-style: none;       /* IE / Edge antic */
+}
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;                  /* Chrome / Safari / Edge */
+}
 
 body {
     background-color: var(--bg);
@@ -360,12 +372,6 @@ body {
 
     /* =========================================================
        3. RODET NUMÈRIC (ASCENDENT — pensat per a rellotges)
-       =========================================================
-       Ordre intern: [0, 1, 2, ..., maxDigit] × repeats.
-       Els passos es calculen com (nou - vell), de manera que
-       els dígits pugen suaument (5 → 6 → 7 ...) tal com fa un
-       rellotge real. Amb l'ordre antic (descendent) les rodes
-       saltaven sense animar-se.
        ========================================================= */
     var TRANSITION = 'transform .55s cubic-bezier(.22, 1, .36, 1)';
     var digitWidthCache = {};
@@ -405,7 +411,6 @@ body {
         allWheels.push(this);
     }
 
-    // Amb ordre ascendent, l'índex del dígit és el propi dígit.
     Wheel.prototype._indexOf = function (digit) { return digit; };
 
     Wheel.prototype._measure = function () {
@@ -451,7 +456,6 @@ body {
         // === PASSOS ASCENDENTS: (nou - vell + L) % L ===
         var steps = ((digit - this.digit) % L + L) % L;
         if (steps === 0) return;
-        // Si el salt és massa gran (> meitat de la roda), resetejem sense animar
         if (steps * 2 > L) { this.reset(digit); return; }
         var lastIndex = this.total - 1;
         if (this.repeats >= 3 && this.pos + steps > lastIndex) {
