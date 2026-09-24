@@ -46,7 +46,7 @@ body {
     font-family: system-ui, -apple-system, sans-serif;
 }
 
-/* ==== ORBE ANIMADA (CSS pur, 13s) ==== */
+/* ==== ORBE (JS, 30fps, baix consum) ==== */
 .floating-orb {
     position: fixed;
     top: 0;
@@ -62,18 +62,9 @@ body {
     filter: blur(30px);
     pointer-events: none;
     z-index: 0;
-    animation: orbFloat 13s linear infinite;
-}
-@keyframes orbFloat {
-    0%    { transform: translate3d(calc(85vw - 160px), calc(50vh - 160px), 0); }
-    12.5% { transform: translate3d(calc(74vw - 160px), calc(72vh - 160px), 0); }
-    25%   { transform: translate3d(calc(50vw - 160px), calc(82vh - 160px), 0); }
-    37.5% { transform: translate3d(calc(26vw - 160px), calc(72vh - 160px), 0); }
-    50%   { transform: translate3d(calc(15vw - 160px), calc(50vh - 160px), 0); }
-    62.5% { transform: translate3d(calc(26vw - 160px), calc(28vh - 160px), 0); }
-    75%   { transform: translate3d(calc(50vw - 160px), calc(18vh - 160px), 0); }
-    87.5% { transform: translate3d(calc(74vw - 160px), calc(28vh - 160px), 0); }
-    100%  { transform: translate3d(calc(85vw - 160px), calc(50vh - 160px), 0); }
+    transform: translate3d(0, 0, 0);
+    will-change: transform;
+    contain: strict;
 }
 
 /* ==== THEME BUTTON ==== */
@@ -264,7 +255,7 @@ body {
 </head>
 <body>
 
-    <div class="floating-orb"></div>
+    <div id="glowing-orb" class="floating-orb"></div>
 
     <button id="theme-icon" aria-label="Canviar tema">
         <svg id="icon-sun" xmlns="http://www.w3.org/2000/svg" width="20" height="20"
@@ -315,10 +306,31 @@ body {
 (function () {
     'use strict';
 
+    var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var allWheels = [];
 
     /* =========================================================
-       1. ICONA DE TEMA
+       1. ORBE ANIMADA (30fps — mateix sistema que l'original)
+       ========================================================= */
+    var orb = document.getElementById('glowing-orb');
+    var orbRunning = !reduceMotion;
+    var lastOrbFrame = 0;
+
+    function animateOrb(now) {
+        if (!orbRunning) return;
+        if (now - lastOrbFrame > 33) {
+            var t = now * 0.0006;
+            var x = window.innerWidth  / 2 + Math.sin(t * 0.8) * window.innerWidth  * 0.38;
+            var y = window.innerHeight / 2 + Math.cos(t * 0.5) * window.innerHeight * 0.32;
+            orb.style.transform = 'translate3d(' + (x - 160) + 'px,' + (y - 160) + 'px,0)';
+            lastOrbFrame = now;
+        }
+        requestAnimationFrame(animateOrb);
+    }
+    if (orbRunning) requestAnimationFrame(animateOrb);
+
+    /* =========================================================
+       2. ICONA DE TEMA
        ========================================================= */
     var themeIcon = document.getElementById('theme-icon');
     var iconSun   = document.getElementById('icon-sun');
@@ -347,7 +359,7 @@ body {
     updateThemeIcon();
 
     /* =========================================================
-       2. RODET NUMÈRIC (ASCENDENT)
+       3. RODET NUMÈRIC (ASCENDENT)
        ========================================================= */
     var TRANSITION = 'transform .55s cubic-bezier(.22, 1, .36, 1)';
     var digitWidthCache = {};
@@ -465,7 +477,7 @@ body {
     }
 
     /* =========================================================
-       3. ZONES HORÀRIES / PAÏSOS
+       4. ZONES HORÀRIES / PAÏSOS
        ========================================================= */
     var COUNTRIES = [
         ['Afghanistan', 'Asia/Kabul'], ['Albània', 'Europe/Tirane'], ['Alemanya', 'Europe/Berlin'],
@@ -544,11 +556,7 @@ body {
     ];
 
     /* =========================================================
-       4. CACHE D'OFFSETS DE ZONA HORÀRIA
-       =========================================================
-       Optimització crítica: en lloc de cridar Intl.DateTimeFormat
-       a cada tick (molt costós), calculem l'offset d'una zona
-       UNA vegada i el reutilitzem durant 30 minuts.
+       5. CACHE D'OFFSETS DE ZONA HORÀRIA
        ========================================================= */
     var tzFmtCache = {};
     var tzOffsetCache = {};
@@ -601,8 +609,6 @@ body {
         return off;
     }
 
-    // Retorna els segons transcorreguts dins del dia (0..86399) per a una zona.
-    // Sense creació d'objectes Date → molt ràpid.
     function secondsInDay(tz) {
         var ms = Date.now() + getTzOffsetMs(tz);
         var totalSec = Math.floor(ms / 1000);
@@ -611,7 +617,7 @@ body {
     }
 
     /* =========================================================
-       5. DETECCIÓ DEL PAÍS VISITANT
+       6. DETECCIÓ DEL PAÍS VISITANT
        ========================================================= */
     var localTz = '';
     try {
@@ -624,7 +630,7 @@ body {
     }
 
     /* =========================================================
-       6. RELLOTGE PRINCIPAL (usa Date local directament → 0 Intl)
+       7. RELLOTGE PRINCIPAL
        ========================================================= */
     var mainHT = new Wheel(document.getElementById('hours-tens-track'),  2, 3);
     var mainHU = new Wheel(document.getElementById('hours-units-track'), 9, 3);
@@ -647,7 +653,7 @@ body {
     updateMain(false);
 
     /* =========================================================
-       7. GRAELLA DE PAÏSOS
+       8. GRAELLA DE PAÏSOS
        ========================================================= */
     var grid = document.getElementById('small-grid');
     var slots = [];
@@ -753,7 +759,7 @@ body {
     }
 
     /* =========================================================
-       8. SCROLL SECTION (IntersectionObserver en lloc de scroll)
+       9. SCROLL SECTION (IntersectionObserver)
        ========================================================= */
     var scrollSection = document.getElementById('scroll-section');
     var sectionVisible = false;
@@ -772,7 +778,7 @@ body {
     sectionObserver.observe(scrollSection);
 
     /* =========================================================
-       9. BUCLE D'ACTUALITZACIÓ (alineat al segon)
+       10. BUCLE D'ACTUALITZACIÓ
        ========================================================= */
     var tickTimer = null;
 
@@ -789,6 +795,9 @@ body {
     scheduleTick();
 
     document.addEventListener('visibilitychange', function () {
+        orbRunning = !document.hidden && !reduceMotion;
+        if (orbRunning) requestAnimationFrame(animateOrb);
+
         if (document.hidden) {
             if (tickTimer) { clearTimeout(tickTimer); tickTimer = null; }
         } else {
