@@ -25,16 +25,16 @@ body.alt {
 
 html, body { margin: 0; padding: 0; width: 100%; }
 
-/* ==== OCULTAR BARRA DE SCROLL (mantenint el scroll) ==== */
+/* ==== OCULTAR BARRA DE SCROLL ==== */
 html {
-    scrollbar-width: none;          /* Firefox */
-    -ms-overflow-style: none;       /* IE / Edge antic */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
 }
 html::-webkit-scrollbar,
 body::-webkit-scrollbar {
     width: 0;
     height: 0;
-    display: none;                  /* Chrome / Safari / Edge */
+    display: none;
 }
 
 body {
@@ -46,7 +46,7 @@ body {
     font-family: system-ui, -apple-system, sans-serif;
 }
 
-/* ==== ORBE (petita, menys blur = menys RAM GPU) ==== */
+/* ==== ORBE ANIMADA (CSS pur, 13s) ==== */
 .floating-orb {
     position: fixed;
     top: 0;
@@ -62,12 +62,21 @@ body {
     filter: blur(30px);
     pointer-events: none;
     z-index: 0;
-    transform: translate3d(0, 0, 0);
-    will-change: transform;
-    contain: strict;
+    animation: orbFloat 13s linear infinite;
+}
+@keyframes orbFloat {
+    0%    { transform: translate3d(calc(85vw - 160px), calc(50vh - 160px), 0); }
+    12.5% { transform: translate3d(calc(74vw - 160px), calc(72vh - 160px), 0); }
+    25%   { transform: translate3d(calc(50vw - 160px), calc(82vh - 160px), 0); }
+    37.5% { transform: translate3d(calc(26vw - 160px), calc(72vh - 160px), 0); }
+    50%   { transform: translate3d(calc(15vw - 160px), calc(50vh - 160px), 0); }
+    62.5% { transform: translate3d(calc(26vw - 160px), calc(28vh - 160px), 0); }
+    75%   { transform: translate3d(calc(50vw - 160px), calc(18vh - 160px), 0); }
+    87.5% { transform: translate3d(calc(74vw - 160px), calc(28vh - 160px), 0); }
+    100%  { transform: translate3d(calc(85vw - 160px), calc(50vh - 160px), 0); }
 }
 
-/* ==== THEME BUTTON (sense backdrop-filter) ==== */
+/* ==== THEME BUTTON ==== */
 #theme-icon {
     position: fixed;
     top: 1.25rem;
@@ -94,7 +103,6 @@ body {
     width: 100%;
     min-height: 100vh;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
     user-select: none;
@@ -142,10 +150,9 @@ body {
     overflow: hidden;
     height: 1em;
     line-height: 1em;
-    vertical-align: baseline;
     position: relative;
     flex-shrink: 0;
-    contain: layout paint;
+    contain: strict;
 }
 
 .number-track {
@@ -153,6 +160,7 @@ body {
     flex-direction: column;
     flex-shrink: 0;
     backface-visibility: hidden;
+    will-change: transform;
 }
 
 .number-track > span {
@@ -160,8 +168,6 @@ body {
     align-items: center;
     justify-content: center;
     height: 1em;
-    min-height: 1em;
-    max-height: 1em;
     line-height: 1em;
     flex: 0 0 1em;
     white-space: nowrap;
@@ -173,14 +179,7 @@ body {
     line-height: 1;
     align-self: center;
     user-select: none;
-    margin-left: 0.2em;
-    margin-right: 0.2em;
-}
-@media (min-width: 768px) {
-    .colon {
-        margin-left: 0.25em;
-        margin-right: 0.25em;
-    }
+    margin: 0 0.2em;
 }
 
 /* ==== SCROLL SECTION ==== */
@@ -223,6 +222,7 @@ body {
     align-items: center;
     content-visibility: auto;
     contain-intrinsic-size: 0 5rem;
+    contain: layout style;
 }
 
 .small-title {
@@ -248,7 +248,6 @@ body {
 
 .small-group {
     display: flex;
-    flex-direction: column;
     align-items: center;
     flex-shrink: 0;
 }
@@ -258,16 +257,14 @@ body {
     opacity: 0.55;
     line-height: 1;
     align-self: center;
-    user-select: none;
-    margin-left: 0.2em;
-    margin-right: 0.2em;
+    margin: 0 0.2em;
     transform: translateY(-0.05em);
 }
 </style>
 </head>
-<body class="w-full relative">
+<body>
 
-    <div id="glowing-orb" class="floating-orb"></div>
+    <div class="floating-orb"></div>
 
     <button id="theme-icon" aria-label="Canviar tema">
         <svg id="icon-sun" xmlns="http://www.w3.org/2000/svg" width="20" height="20"
@@ -318,31 +315,10 @@ body {
 (function () {
     'use strict';
 
-    var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var allWheels = [];
 
     /* =========================================================
-       1. ORBE ANIMADA (30fps, no 60)
-       ========================================================= */
-    var orb = document.getElementById('glowing-orb');
-    var orbRunning = !reduceMotion;
-    var lastOrbFrame = 0;
-
-    function animateOrb(now) {
-        if (!orbRunning) return;
-        if (now - lastOrbFrame > 33) {
-            var t = now * 0.0006;
-            var x = window.innerWidth  / 2 + Math.sin(t * 0.8) * window.innerWidth  * 0.38;
-            var y = window.innerHeight / 2 + Math.cos(t * 0.5) * window.innerHeight * 0.32;
-            orb.style.transform = 'translate3d(' + (x - 160) + 'px,' + (y - 160) + 'px,0)';
-            lastOrbFrame = now;
-        }
-        requestAnimationFrame(animateOrb);
-    }
-    if (orbRunning) requestAnimationFrame(animateOrb);
-
-    /* =========================================================
-       2. ICONA DE TEMA
+       1. ICONA DE TEMA
        ========================================================= */
     var themeIcon = document.getElementById('theme-icon');
     var iconSun   = document.getElementById('icon-sun');
@@ -371,12 +347,27 @@ body {
     updateThemeIcon();
 
     /* =========================================================
-       3. RODET NUMÈRIC (ASCENDENT — pensat per a rellotges)
+       2. RODET NUMÈRIC (ASCENDENT)
        ========================================================= */
     var TRANSITION = 'transform .55s cubic-bezier(.22, 1, .36, 1)';
     var digitWidthCache = {};
+    var wheelHtmlCache = {};
     var measureCanvas = document.createElement('canvas');
     var measureCtx = measureCanvas.getContext('2d');
+
+    function getWheelHtml(maxDigit, repeats) {
+        var key = maxDigit + 'x' + repeats;
+        var html = wheelHtmlCache[key];
+        if (html !== undefined) return html;
+        html = '';
+        for (var r = 0; r < repeats; r++) {
+            for (var d = 0; d <= maxDigit; d++) {
+                html += '<span>' + d + '</span>';
+            }
+        }
+        wheelHtmlCache[key] = html;
+        return html;
+    }
 
     function measureDigit(digit, fontSize) {
         var key = digit + '@' + fontSize.toFixed(2);
@@ -399,19 +390,9 @@ body {
         this.step      = 0;
         this.wheelEl   = trackEl.parentElement;
 
-        // === ORDRE ASCENDENT: 0, 1, 2, ..., maxDigit ===
-        var html = '';
-        for (var r = 0; r < this.repeats; r++) {
-            for (var d = 0; d <= maxDigit; d++) {
-                html += '<span>' + d + '</span>';
-            }
-        }
-        trackEl.innerHTML = html;
-
+        trackEl.innerHTML = getWheelHtml(maxDigit, this.repeats);
         allWheels.push(this);
     }
-
-    Wheel.prototype._indexOf = function (digit) { return digit; };
 
     Wheel.prototype._measure = function () {
         var fs = parseFloat(window.getComputedStyle(this.track).fontSize);
@@ -439,9 +420,9 @@ body {
 
     Wheel.prototype.reset = function (digit) {
         if (digit > this.maxDigit) digit = this.maxDigit;
-        if (digit < 0) digit = 0;
+        else if (digit < 0) digit = 0;
         this.digit = digit;
-        this.pos = (this.repeats >= 2 ? this.L : 0) + this._indexOf(digit);
+        this.pos = this.L + digit;
         this._render(false);
         this._fitWidth();
         void this.track.offsetHeight;
@@ -449,17 +430,15 @@ body {
 
     Wheel.prototype.set = function (digit, animate) {
         if (digit > this.maxDigit) digit = this.maxDigit;
-        if (digit < 0) digit = 0;
+        else if (digit < 0) digit = 0;
         if (digit === this.digit) return;
         if (!animate || this.digit === null) { this.reset(digit); return; }
         var L = this.L;
-        // === PASSOS ASCENDENTS: (nou - vell + L) % L ===
         var steps = ((digit - this.digit) % L + L) % L;
         if (steps === 0) return;
         if (steps * 2 > L) { this.reset(digit); return; }
-        var lastIndex = this.total - 1;
-        if (this.repeats >= 3 && this.pos + steps > lastIndex) {
-            this.pos -= L * (this.repeats - 2);
+        if (this.pos + steps > this.total - 1) {
+            this.pos -= L;
             this._render(false);
             void this.track.offsetHeight;
         }
@@ -475,7 +454,7 @@ body {
         resizeTimer = setTimeout(function () {
             digitWidthCache = {};
             for (var i = 0; i < allWheels.length; i++) allWheels[i].remeasure();
-        }, 150);
+        }, 200);
     }, { passive: true });
 
     if (document.fonts && document.fonts.ready) {
@@ -486,205 +465,94 @@ body {
     }
 
     /* =========================================================
-       4. ZONES HORÀRIES / PAÏSOS
+       3. ZONES HORÀRIES / PAÏSOS
        ========================================================= */
     var COUNTRIES = [
-        ['Afghanistan', 'Asia/Kabul'],
-        ['Albània', 'Europe/Tirane'],
-        ['Alemanya', 'Europe/Berlin'],
-        ['Algèria', 'Africa/Algiers'],
-        ['Andorra', 'Europe/Andorra'],
-        ['Angola', 'Africa/Luanda'],
-        ['Antigua i Barbuda', 'America/Antigua'],
-        ['Aràbia Saudita', 'Asia/Riyadh'],
-        ['Argentina', 'America/Argentina/Buenos_Aires'],
-        ['Armènia', 'Asia/Yerevan'],
-        ['Austràlia', 'Australia/Sydney'],
-        ['Àustria', 'Europe/Vienna'],
-        ['Azerbaidjan', 'Asia/Baku'],
-        ['Bahames', 'America/Nassau'],
-        ['Bahrain', 'Asia/Bahrain'],
-        ['Bangladesh', 'Asia/Dhaka'],
-        ['Barbados', 'America/Barbados'],
-        ['Belarús', 'Europe/Minsk'],
-        ['Bèlgica', 'Europe/Brussels'],
-        ['Belize', 'America/Belize'],
-        ['Benín', 'Africa/Porto-Novo'],
-        ['Bhutan', 'Asia/Thimphu'],
-        ['Bolívia', 'America/La_Paz'],
-        ['Bòsnia i Hercegovina', 'Europe/Sarajevo'],
-        ['Botswana', 'Africa/Gaborone'],
-        ['Brasil', 'America/Sao_Paulo'],
-        ['Brunei', 'Asia/Brunei'],
-        ['Bulgària', 'Europe/Sofia'],
-        ['Burkina Faso', 'Africa/Ouagadougou'],
-        ['Burundi', 'Africa/Bujumbura'],
-        ['Cambodja', 'Asia/Phnom_Penh'],
-        ['Camerun', 'Africa/Douala'],
-        ['Canadà', 'America/Toronto'],
-        ['Cap Verd', 'Atlantic/Cape_Verde'],
-        ['Colòmbia', 'America/Bogota'],
-        ['Comores', 'Indian/Comoro'],
-        ['Corea del Nord', 'Asia/Pyongyang'],
-        ['Corea del Sud', 'Asia/Seoul'],
-        ['Costa d\'Ivori', 'Africa/Abidjan'],
-        ['Costa Rica', 'America/Costa_Rica'],
-        ['Croàcia', 'Europe/Zagreb'],
-        ['Cuba', 'America/Havana'],
-        ['Dinamarca', 'Europe/Copenhagen'],
-        ['Djibouti', 'Africa/Djibouti'],
-        ['Dominica', 'America/Dominica'],
-        ['Egipte', 'Africa/Cairo'],
-        ['El Salvador', 'America/El_Salvador'],
-        ['Emirats Àrabs Units', 'Asia/Dubai'],
-        ['Equador', 'America/Guayaquil'],
-        ['Eritrea', 'Africa/Asmara'],
-        ['Eslovàquia', 'Europe/Bratislava'],
-        ['Eslovènia', 'Europe/Ljubljana'],
-        ['Espanya', 'Europe/Madrid'],
-        ['Estats Units', 'America/New_York'],
-        ['Estònia', 'Europe/Tallinn'],
-        ['Eswatini', 'Africa/Mbabane'],
-        ['Etiòpia', 'Africa/Addis_Ababa'],
-        ['Fiji', 'Pacific/Fiji'],
-        ['Filipines', 'Asia/Manila'],
-        ['Finlàndia', 'Europe/Helsinki'],
-        ['França', 'Europe/Paris'],
-        ['Gabon', 'Africa/Libreville'],
-        ['Gàmbia', 'Africa/Banjul'],
-        ['Geòrgia', 'Asia/Tbilisi'],
-        ['Ghana', 'Africa/Accra'],
-        ['Grècia', 'Europe/Athens'],
-        ['Grenada', 'America/Grenada'],
-        ['Guatemala', 'America/Guatemala'],
-        ['Guinea', 'Africa/Conakry'],
-        ['Guinea Bissau', 'Africa/Bissau'],
-        ['Guinea Equatorial', 'Africa/Malabo'],
-        ['Guyana', 'America/Guyana'],
-        ['Haití', 'America/Port-au-Prince'],
-        ['Hondures', 'America/Tegucigalpa'],
-        ['Hongria', 'Europe/Budapest'],
-        ['Iemen', 'Asia/Aden'],
-        ['Índia', 'Asia/Kolkata'],
-        ['Indonèsia', 'Asia/Jakarta'],
-        ['Iran', 'Asia/Tehran'],
-        ['Iraq', 'Asia/Baghdad'],
-        ['Irlanda', 'Europe/Dublin'],
-        ['Islàndia', 'Atlantic/Reykjavik'],
-        ['Israel', 'Asia/Jerusalem'],
-        ['Itàlia', 'Europe/Rome'],
-        ['Jamaica', 'America/Jamaica'],
-        ['Japó', 'Asia/Tokyo'],
-        ['Jordània', 'Asia/Amman'],
-        ['Kazakhstan', 'Asia/Almaty'],
-        ['Kenya', 'Africa/Nairobi'],
-        ['Kirguizistan', 'Asia/Bishkek'],
-        ['Kiribati', 'Pacific/Tarawa'],
-        ['Kuwait', 'Asia/Kuwait'],
-        ['Laos', 'Asia/Vientiane'],
-        ['Lesotho', 'Africa/Maseru'],
-        ['Letònia', 'Europe/Riga'],
-        ['Líban', 'Asia/Beirut'],
-        ['Libèria', 'Africa/Monrovia'],
-        ['Líbia', 'Africa/Tripoli'],
-        ['Liechtenstein', 'Europe/Vaduz'],
-        ['Lituània', 'Europe/Vilnius'],
-        ['Luxemburg', 'Europe/Luxembourg'],
-        ['Macedònia del Nord', 'Europe/Skopje'],
-        ['Madagascar', 'Indian/Antananarivo'],
-        ['Malàisia', 'Asia/Kuala_Lumpur'],
-        ['Malawi', 'Africa/Blantyre'],
-        ['Maldives', 'Indian/Maldives'],
-        ['Mali', 'Africa/Bamako'],
-        ['Malta', 'Europe/Malta'],
-        ['Marroc', 'Africa/Casablanca'],
-        ['Maurici', 'Indian/Mauritius'],
-        ['Mauritània', 'Africa/Nouakchott'],
-        ['Mèxic', 'America/Mexico_City'],
-        ['Micronèsia', 'Pacific/Chuuk'],
-        ['Moçambic', 'Africa/Maputo'],
-        ['Moldàvia', 'Europe/Chisinau'],
-        ['Mònaco', 'Europe/Monaco'],
-        ['Mongòlia', 'Asia/Ulaanbaatar'],
-        ['Montenegro', 'Europe/Podgorica'],
-        ['Namíbia', 'Africa/Windhoek'],
-        ['Nauru', 'Pacific/Nauru'],
-        ['Nepal', 'Asia/Kathmandu'],
-        ['Nicaragua', 'America/Managua'],
-        ['Níger', 'Africa/Niamey'],
-        ['Nigèria', 'Africa/Lagos'],
-        ['Noruega', 'Europe/Oslo'],
-        ['Nova Zelanda', 'Pacific/Auckland'],
-        ['Oman', 'Asia/Muscat'],
-        ['Països Baixos', 'Europe/Amsterdam'],
-        ['Pakistan', 'Asia/Karachi'],
-        ['Palau', 'Pacific/Palau'],
-        ['Palestina', 'Asia/Gaza'],
-        ['Panamà', 'America/Panama'],
-        ['Papua Nova Guinea', 'Pacific/Port_Moresby'],
-        ['Paraguai', 'America/Asuncion'],
-        ['Perú', 'America/Lima'],
-        ['Polònia', 'Europe/Warsaw'],
-        ['Portugal', 'Europe/Lisbon'],
-        ['Qatar', 'Asia/Qatar'],
-        ['Regne Unit', 'Europe/London'],
+        ['Afghanistan', 'Asia/Kabul'], ['Albània', 'Europe/Tirane'], ['Alemanya', 'Europe/Berlin'],
+        ['Algèria', 'Africa/Algiers'], ['Andorra', 'Europe/Andorra'], ['Angola', 'Africa/Luanda'],
+        ['Antigua i Barbuda', 'America/Antigua'], ['Aràbia Saudita', 'Asia/Riyadh'],
+        ['Argentina', 'America/Argentina/Buenos_Aires'], ['Armènia', 'Asia/Yerevan'],
+        ['Austràlia', 'Australia/Sydney'], ['Àustria', 'Europe/Vienna'], ['Azerbaidjan', 'Asia/Baku'],
+        ['Bahames', 'America/Nassau'], ['Bahrain', 'Asia/Bahrain'], ['Bangladesh', 'Asia/Dhaka'],
+        ['Barbados', 'America/Barbados'], ['Belarús', 'Europe/Minsk'], ['Bèlgica', 'Europe/Brussels'],
+        ['Belize', 'America/Belize'], ['Benín', 'Africa/Porto-Novo'], ['Bhutan', 'Asia/Thimphu'],
+        ['Bolívia', 'America/La_Paz'], ['Bòsnia i Hercegovina', 'Europe/Sarajevo'],
+        ['Botswana', 'Africa/Gaborone'], ['Brasil', 'America/Sao_Paulo'], ['Brunei', 'Asia/Brunei'],
+        ['Bulgària', 'Europe/Sofia'], ['Burkina Faso', 'Africa/Ouagadougou'], ['Burundi', 'Africa/Bujumbura'],
+        ['Cambodja', 'Asia/Phnom_Penh'], ['Camerun', 'Africa/Douala'], ['Canadà', 'America/Toronto'],
+        ['Cap Verd', 'Atlantic/Cape_Verde'], ['Colòmbia', 'America/Bogota'], ['Comores', 'Indian/Comoro'],
+        ['Corea del Nord', 'Asia/Pyongyang'], ['Corea del Sud', 'Asia/Seoul'],
+        ['Costa d\'Ivori', 'Africa/Abidjan'], ['Costa Rica', 'America/Costa_Rica'],
+        ['Croàcia', 'Europe/Zagreb'], ['Cuba', 'America/Havana'], ['Dinamarca', 'Europe/Copenhagen'],
+        ['Djibouti', 'Africa/Djibouti'], ['Dominica', 'America/Dominica'], ['Egipte', 'Africa/Cairo'],
+        ['El Salvador', 'America/El_Salvador'], ['Emirats Àrabs Units', 'Asia/Dubai'],
+        ['Equador', 'America/Guayaquil'], ['Eritrea', 'Africa/Asmara'], ['Eslovàquia', 'Europe/Bratislava'],
+        ['Eslovènia', 'Europe/Ljubljana'], ['Espanya', 'Europe/Madrid'], ['Estats Units', 'America/New_York'],
+        ['Estònia', 'Europe/Tallinn'], ['Eswatini', 'Africa/Mbabane'], ['Etiòpia', 'Africa/Addis_Ababa'],
+        ['Fiji', 'Pacific/Fiji'], ['Filipines', 'Asia/Manila'], ['Finlàndia', 'Europe/Helsinki'],
+        ['França', 'Europe/Paris'], ['Gabon', 'Africa/Libreville'], ['Gàmbia', 'Africa/Banjul'],
+        ['Geòrgia', 'Asia/Tbilisi'], ['Ghana', 'Africa/Accra'], ['Grècia', 'Europe/Athens'],
+        ['Grenada', 'America/Grenada'], ['Guatemala', 'America/Guatemala'], ['Guinea', 'Africa/Conakry'],
+        ['Guinea Bissau', 'Africa/Bissau'], ['Guinea Equatorial', 'Africa/Malabo'],
+        ['Guyana', 'America/Guyana'], ['Haití', 'America/Port-au-Prince'],
+        ['Hondures', 'America/Tegucigalpa'], ['Hongria', 'Europe/Budapest'], ['Iemen', 'Asia/Aden'],
+        ['Índia', 'Asia/Kolkata'], ['Indonèsia', 'Asia/Jakarta'], ['Iran', 'Asia/Tehran'],
+        ['Iraq', 'Asia/Baghdad'], ['Irlanda', 'Europe/Dublin'], ['Islàndia', 'Atlantic/Reykjavik'],
+        ['Israel', 'Asia/Jerusalem'], ['Itàlia', 'Europe/Rome'], ['Jamaica', 'America/Jamaica'],
+        ['Japó', 'Asia/Tokyo'], ['Jordània', 'Asia/Amman'], ['Kazakhstan', 'Asia/Almaty'],
+        ['Kenya', 'Africa/Nairobi'], ['Kirguizistan', 'Asia/Bishkek'], ['Kiribati', 'Pacific/Tarawa'],
+        ['Kuwait', 'Asia/Kuwait'], ['Laos', 'Asia/Vientiane'], ['Lesotho', 'Africa/Maseru'],
+        ['Letònia', 'Europe/Riga'], ['Líban', 'Asia/Beirut'], ['Libèria', 'Africa/Monrovia'],
+        ['Líbia', 'Africa/Tripoli'], ['Liechtenstein', 'Europe/Vaduz'], ['Lituània', 'Europe/Vilnius'],
+        ['Luxemburg', 'Europe/Luxembourg'], ['Macedònia del Nord', 'Europe/Skopje'],
+        ['Madagascar', 'Indian/Antananarivo'], ['Malàisia', 'Asia/Kuala_Lumpur'],
+        ['Malawi', 'Africa/Blantyre'], ['Maldives', 'Indian/Maldives'], ['Mali', 'Africa/Bamako'],
+        ['Malta', 'Europe/Malta'], ['Marroc', 'Africa/Casablanca'], ['Maurici', 'Indian/Mauritius'],
+        ['Mauritània', 'Africa/Nouakchott'], ['Mèxic', 'America/Mexico_City'],
+        ['Micronèsia', 'Pacific/Chuuk'], ['Moçambic', 'Africa/Maputo'], ['Moldàvia', 'Europe/Chisinau'],
+        ['Mònaco', 'Europe/Monaco'], ['Mongòlia', 'Asia/Ulaanbaatar'], ['Montenegro', 'Europe/Podgorica'],
+        ['Namíbia', 'Africa/Windhoek'], ['Nauru', 'Pacific/Nauru'], ['Nepal', 'Asia/Kathmandu'],
+        ['Nicaragua', 'America/Managua'], ['Níger', 'Africa/Niamey'], ['Nigèria', 'Africa/Lagos'],
+        ['Noruega', 'Europe/Oslo'], ['Nova Zelanda', 'Pacific/Auckland'], ['Oman', 'Asia/Muscat'],
+        ['Països Baixos', 'Europe/Amsterdam'], ['Pakistan', 'Asia/Karachi'], ['Palau', 'Pacific/Palau'],
+        ['Palestina', 'Asia/Gaza'], ['Panamà', 'America/Panama'],
+        ['Papua Nova Guinea', 'Pacific/Port_Moresby'], ['Paraguai', 'America/Asuncion'],
+        ['Perú', 'America/Lima'], ['Polònia', 'Europe/Warsaw'], ['Portugal', 'Europe/Lisbon'],
+        ['Qatar', 'Asia/Qatar'], ['Regne Unit', 'Europe/London'],
         ['República Centreafricana', 'Africa/Bangui'],
         ['República Democràtica del Congo', 'Africa/Kinshasa'],
         ['República del Congo', 'Africa/Brazzaville'],
-        ['República Dominicana', 'America/Santo_Domingo'],
-        ['República Txeca', 'Europe/Prague'],
-        ['Romania', 'Europe/Bucharest'],
-        ['Ruanda', 'Africa/Kigali'],
-        ['Rússia', 'Europe/Moscow'],
-        ['Saint Kitts i Nevis', 'America/St_Kitts'],
-        ['Saint Lucia', 'America/St_Lucia'],
-        ['Saint Vincent i les Grenadines', 'America/St_Vincent'],
-        ['Samoa', 'Pacific/Apia'],
-        ['San Marino', 'Europe/San_Marino'],
-        ['São Tomé i Príncipe', 'Africa/Sao_Tome'],
-        ['Senegal', 'Africa/Dakar'],
-        ['Sèrbia', 'Europe/Belgrade'],
-        ['Seychelles', 'Indian/Mahe'],
-        ['Sierra Leone', 'Africa/Freetown'],
-        ['Singapur', 'Asia/Singapore'],
-        ['Síria', 'Asia/Damascus'],
-        ['Somàlia', 'Africa/Mogadishu'],
-        ['Sri Lanka', 'Asia/Colombo'],
-        ['Sudan', 'Africa/Khartoum'],
-        ['Sudan del Sud', 'Africa/Juba'],
-        ['Suècia', 'Europe/Stockholm'],
-        ['Suïssa', 'Europe/Zurich'],
-        ['Surinam', 'America/Paramaribo'],
-        ['Tadjikistan', 'Asia/Dushanbe'],
-        ['Tailàndia', 'Asia/Bangkok'],
-        ['Tanzània', 'Africa/Dar_es_Salaam'],
-        ['Timor Oriental', 'Asia/Dili'],
-        ['Togo', 'Africa/Lome'],
-        ['Tonga', 'Pacific/Tongatapu'],
-        ['Trinitat i Tobago', 'America/Port_of_Spain'],
-        ['Tunísia', 'Africa/Tunis'],
-        ['Turkmenistan', 'Asia/Ashgabat'],
-        ['Turquia', 'Europe/Istanbul'],
-        ['Tuvalu', 'Pacific/Funafuti'],
-        ['Ucraïna', 'Europe/Kyiv'],
-        ['Uganda', 'Africa/Kampala'],
-        ['Uruguai', 'America/Montevideo'],
-        ['Uzbekistan', 'Asia/Tashkent'],
-        ['Vanuatu', 'Pacific/Efate'],
-        ['Vaticà', 'Europe/Vatican'],
-        ['Veneçuela', 'America/Caracas'],
-        ['Vietnam', 'Asia/Ho_Chi_Minh'],
-        ['Xile', 'America/Santiago'],
-        ['Xina', 'Asia/Shanghai'],
-        ['Xipre', 'Asia/Nicosia'],
-        ['Zàmbia', 'Africa/Lusaka'],
-        ['Zimbabwe', 'Africa/Harare'],
-        ['Illes Marshall', 'Pacific/Majuro'],
-        ['Illes Salomó', 'Pacific/Guadalcanal']
+        ['República Dominicana', 'America/Santo_Domingo'], ['República Txeca', 'Europe/Prague'],
+        ['Romania', 'Europe/Bucharest'], ['Ruanda', 'Africa/Kigali'], ['Rússia', 'Europe/Moscow'],
+        ['Saint Kitts i Nevis', 'America/St_Kitts'], ['Saint Lucia', 'America/St_Lucia'],
+        ['Saint Vincent i les Grenadines', 'America/St_Vincent'], ['Samoa', 'Pacific/Apia'],
+        ['San Marino', 'Europe/San_Marino'], ['São Tomé i Príncipe', 'Africa/Sao_Tome'],
+        ['Senegal', 'Africa/Dakar'], ['Sèrbia', 'Europe/Belgrade'], ['Seychelles', 'Indian/Mahe'],
+        ['Sierra Leone', 'Africa/Freetown'], ['Singapur', 'Asia/Singapore'], ['Síria', 'Asia/Damascus'],
+        ['Somàlia', 'Africa/Mogadishu'], ['Sri Lanka', 'Asia/Colombo'], ['Sudan', 'Africa/Khartoum'],
+        ['Sudan del Sud', 'Africa/Juba'], ['Suècia', 'Europe/Stockholm'], ['Suïssa', 'Europe/Zurich'],
+        ['Surinam', 'America/Paramaribo'], ['Tadjikistan', 'Asia/Dushanbe'], ['Tailàndia', 'Asia/Bangkok'],
+        ['Tanzània', 'Africa/Dar_es_Salaam'], ['Timor Oriental', 'Asia/Dili'], ['Togo', 'Africa/Lome'],
+        ['Tonga', 'Pacific/Tongatapu'], ['Trinitat i Tobago', 'America/Port_of_Spain'],
+        ['Tunísia', 'Africa/Tunis'], ['Turkmenistan', 'Asia/Ashgabat'], ['Turquia', 'Europe/Istanbul'],
+        ['Tuvalu', 'Pacific/Funafuti'], ['Ucraïna', 'Europe/Kyiv'], ['Uganda', 'Africa/Kampala'],
+        ['Uruguai', 'America/Montevideo'], ['Uzbekistan', 'Asia/Tashkent'], ['Vanuatu', 'Pacific/Efate'],
+        ['Vaticà', 'Europe/Vatican'], ['Veneçuela', 'America/Caracas'],
+        ['Vietnam', 'Asia/Ho_Chi_Minh'], ['Xile', 'America/Santiago'], ['Xina', 'Asia/Shanghai'],
+        ['Xipre', 'Asia/Nicosia'], ['Zàmbia', 'Africa/Lusaka'], ['Zimbabwe', 'Africa/Harare'],
+        ['Illes Marshall', 'Pacific/Majuro'], ['Illes Salomó', 'Pacific/Guadalcanal']
     ];
 
-    /* ---------- Formatters amb caché ---------- */
+    /* =========================================================
+       4. CACHE D'OFFSETS DE ZONA HORÀRIA
+       =========================================================
+       Optimització crítica: en lloc de cridar Intl.DateTimeFormat
+       a cada tick (molt costós), calculem l'offset d'una zona
+       UNA vegada i el reutilitzem durant 30 minuts.
+       ========================================================= */
     var tzFmtCache = {};
+    var tzOffsetCache = {};
+    var TZ_OFFSET_TTL = 30 * 60 * 1000; // 30 min
 
     function tzFormatter(tz) {
         var f = tzFmtCache[tz];
@@ -703,24 +571,48 @@ body {
         return f;
     }
 
-    function timeInZone(tz) {
-        var d = new Date();
+    function getTzOffsetMs(tz) {
+        var cached = tzOffsetCache[tz];
+        var now = Date.now();
+        if (cached !== undefined && now - cached.at < TZ_OFFSET_TTL) {
+            return cached.off;
+        }
         var f = tzFormatter(tz);
-        if (!f) {
-            return { h: d.getHours(), m: d.getMinutes(), s: d.getSeconds() };
+        var off = 0;
+        if (f) {
+            var d = new Date(now);
+            var parts = f.formatToParts(d);
+            var h = 0, m = 0, s = 0;
+            for (var i = 0; i < parts.length; i++) {
+                var p = parts[i];
+                var t = p.type;
+                if (t === 'hour') h = parseInt(p.value, 10) % 24;
+                else if (t === 'minute') m = parseInt(p.value, 10);
+                else if (t === 'second') s = parseInt(p.value, 10);
+            }
+            var localSec = h * 3600 + m * 60 + s;
+            var utcSec = d.getUTCHours() * 3600 + d.getUTCMinutes() * 60 + d.getUTCSeconds();
+            var diff = localSec - utcSec;
+            if (diff > 43200) diff -= 86400;
+            else if (diff < -43200) diff += 86400;
+            off = diff * 1000;
         }
-        var parts = f.formatToParts(d);
-        var h = 0, m = 0, s = 0;
-        for (var i = 0; i < parts.length; i++) {
-            var p = parts[i];
-            if (p.type === 'hour')        h = parseInt(p.value, 10) % 24;
-            else if (p.type === 'minute') m = parseInt(p.value, 10);
-            else if (p.type === 'second') s = parseInt(p.value, 10);
-        }
-        return { h: h, m: m, s: s };
+        tzOffsetCache[tz] = { off: off, at: now };
+        return off;
     }
 
-    /* ---------- Detecció del país visitant ---------- */
+    // Retorna els segons transcorreguts dins del dia (0..86399) per a una zona.
+    // Sense creació d'objectes Date → molt ràpid.
+    function secondsInDay(tz) {
+        var ms = Date.now() + getTzOffsetMs(tz);
+        var totalSec = Math.floor(ms / 1000);
+        var s = totalSec % 86400;
+        return s < 0 ? s + 86400 : s;
+    }
+
+    /* =========================================================
+       5. DETECCIÓ DEL PAÍS VISITANT
+       ========================================================= */
     var localTz = '';
     try {
         localTz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
@@ -732,31 +624,30 @@ body {
     }
 
     /* =========================================================
-       5. RELLOTGE PRINCIPAL
+       6. RELLOTGE PRINCIPAL (usa Date local directament → 0 Intl)
        ========================================================= */
-    var mainHT = new Wheel(document.getElementById('hours-tens-track'),  2, 4);
+    var mainHT = new Wheel(document.getElementById('hours-tens-track'),  2, 3);
     var mainHU = new Wheel(document.getElementById('hours-units-track'), 9, 3);
-    var mainMT = new Wheel(document.getElementById('mins-tens-track'),   5, 4);
+    var mainMT = new Wheel(document.getElementById('mins-tens-track'),   5, 3);
     var mainMU = new Wheel(document.getElementById('mins-units-track'),  9, 3);
-    var mainST = new Wheel(document.getElementById('secs-tens-track'),   5, 4);
+    var mainST = new Wheel(document.getElementById('secs-tens-track'),   5, 3);
     var mainSU = new Wheel(document.getElementById('secs-units-track'),  9, 3);
 
     function updateMain(animate) {
-        var t = localTz
-            ? timeInZone(localTz)
-            : { h: new Date().getHours(), m: new Date().getMinutes(), s: new Date().getSeconds() };
-        mainHT.set(Math.floor(t.h / 10), animate);
-        mainHU.set(t.h % 10, animate);
-        mainMT.set(Math.floor(t.m / 10), animate);
-        mainMU.set(t.m % 10, animate);
-        mainST.set(Math.floor(t.s / 10), animate);
-        mainSU.set(t.s % 10, animate);
+        var d = new Date();
+        var h = d.getHours(), m = d.getMinutes(), s = d.getSeconds();
+        mainHT.set((h / 10) | 0, animate);
+        mainHU.set(h % 10, animate);
+        mainMT.set((m / 10) | 0, animate);
+        mainMU.set(m % 10, animate);
+        mainST.set((s / 10) | 0, animate);
+        mainSU.set(s % 10, animate);
     }
 
     updateMain(false);
 
     /* =========================================================
-       6. GRAELLA DE PAÏSOS (creació mandrosa dels rodets)
+       7. GRAELLA DE PAÏSOS
        ========================================================= */
     var grid = document.getElementById('small-grid');
     var slots = [];
@@ -765,10 +656,11 @@ body {
     var slotObserver = new IntersectionObserver(function (entries) {
         for (var i = 0; i < entries.length; i++) {
             var entry = entries[i];
-            var idx = parseInt(entry.target.dataset.slotIdx, 10);
+            var idx = entry.target.__slotIdx;
             if (entry.isIntersecting) {
                 visibleSlots.add(idx);
                 var s = slots[idx];
+                if (s && !s.wheels) s.ensure();
                 if (s) s.tick(false);
             } else {
                 visibleSlots.delete(idx);
@@ -793,11 +685,11 @@ body {
 
         var wrapper = document.createElement('div');
         wrapper.className = 'slot';
-        wrapper.dataset.slotIdx = String(idx);
+        wrapper.__slotIdx = idx;
 
         var p = 'slot-' + idx;
         wrapper.innerHTML =
-            '<h3 class="small-title"></h3>' +
+            '<h3 class="small-title">' + country[0] + '</h3>' +
             '<div class="small-countdown-wrap">' +
                 groupHTML(p, ['ht', 'hu']) +
                 '<span class="small-colon">:</span>' +
@@ -805,8 +697,6 @@ body {
                 '<span class="small-colon">:</span>' +
                 groupHTML(p, ['st', 'su']) +
             '</div>';
-
-        wrapper.querySelector('.small-title').textContent = country[0];
 
         grid.appendChild(wrapper);
         this.el = wrapper;
@@ -817,24 +707,27 @@ body {
         if (this.wheels) return;
         var p = 'slot-' + this.idx;
         this.wheels = {
-            ht: new Wheel(document.getElementById(p + '-ht'), 2, 4),
+            ht: new Wheel(document.getElementById(p + '-ht'), 2, 3),
             hu: new Wheel(document.getElementById(p + '-hu'), 9, 3),
-            mt: new Wheel(document.getElementById(p + '-mt'), 5, 4),
+            mt: new Wheel(document.getElementById(p + '-mt'), 5, 3),
             mu: new Wheel(document.getElementById(p + '-mu'), 9, 3),
-            st: new Wheel(document.getElementById(p + '-st'), 5, 4),
+            st: new Wheel(document.getElementById(p + '-st'), 5, 3),
             su: new Wheel(document.getElementById(p + '-su'), 9, 3)
         };
     };
 
     Slot.prototype._write = function (animate) {
-        var t = timeInZone(this.tz);
+        var sec = secondsInDay(this.tz);
+        var h = (sec / 3600) | 0;
+        var m = ((sec % 3600) / 60) | 0;
+        var s = sec % 60;
         var w = this.wheels;
-        w.ht.set(Math.floor(t.h / 10), animate);
-        w.hu.set(t.h % 10, animate);
-        w.mt.set(Math.floor(t.m / 10), animate);
-        w.mu.set(t.m % 10, animate);
-        w.st.set(Math.floor(t.s / 10), animate);
-        w.su.set(t.s % 10, animate);
+        w.ht.set((h / 10) | 0, animate);
+        w.hu.set(h % 10, animate);
+        w.mt.set((m / 10) | 0, animate);
+        w.mu.set(m % 10, animate);
+        w.st.set((s / 10) | 0, animate);
+        w.su.set(s % 10, animate);
     };
 
     Slot.prototype.tick = function (animate) {
@@ -860,30 +753,26 @@ body {
     }
 
     /* =========================================================
-       7. SCROLL SECTION
+       8. SCROLL SECTION (IntersectionObserver en lloc de scroll)
        ========================================================= */
     var scrollSection = document.getElementById('scroll-section');
     var sectionVisible = false;
 
-    function checkScroll() {
-        var rect = scrollSection.getBoundingClientRect();
-        var isVis = rect.top < window.innerHeight * 0.9;
-        if (isVis !== sectionVisible) {
-            sectionVisible = isVis;
-            if (isVis) {
-                scrollSection.classList.add('visible');
-                refreshVisible(false);
-            } else {
-                scrollSection.classList.remove('visible');
-            }
+    var sectionObserver = new IntersectionObserver(function (entries) {
+        var isVis = entries[0].isIntersecting;
+        if (isVis === sectionVisible) return;
+        sectionVisible = isVis;
+        if (isVis) {
+            scrollSection.classList.add('visible');
+            refreshVisible(false);
+        } else {
+            scrollSection.classList.remove('visible');
         }
-    }
-    window.addEventListener('scroll', checkScroll, { passive: true });
-    window.addEventListener('resize', checkScroll, { passive: true });
-    checkScroll();
+    }, { rootMargin: '0px 0px -10% 0px' });
+    sectionObserver.observe(scrollSection);
 
     /* =========================================================
-       8. BUCLE D'ACTUALITZACIÓ (alineat al segon)
+       9. BUCLE D'ACTUALITZACIÓ (alineat al segon)
        ========================================================= */
     var tickTimer = null;
 
@@ -900,9 +789,6 @@ body {
     scheduleTick();
 
     document.addEventListener('visibilitychange', function () {
-        orbRunning = !document.hidden && !reduceMotion;
-        if (orbRunning) requestAnimationFrame(animateOrb);
-
         if (document.hidden) {
             if (tickTimer) { clearTimeout(tickTimer); tickTimer = null; }
         } else {
