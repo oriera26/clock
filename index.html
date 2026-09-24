@@ -1,399 +1,914 @@
 <!DOCTYPE html>
 <html lang="ca">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ambilight Visualizer - Pro Sound Engine</title>
-    <style>
-        :root {
-            --bg-color: #000;
-            --apple-glass: rgba(255, 255, 255, 0.1);
-            --apple-border: rgba(255, 255, 255, 0.15);
-            --apple-active: rgba(255, 255, 255, 0.2);
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>World Clock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; }
 
-        body, html {
-            margin: 0; padding: 0;
-            width: 100%; height: 100%;
-            overflow: hidden;
-            background-color: var(--bg-color);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-family: 'SF Pro Display', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            user-select: none;
-        }
+:root {
+    --bg: #f5f4f3;
+    --fg: #000000;
+    --btn-bg: rgba(0, 0, 0, 0.06);
+    --btn-bg-hover: rgba(0, 0, 0, 0.14);
+}
+body.alt {
+    --bg: #121212;
+    --fg: #f5f4f3;
+    --btn-bg: rgba(255, 255, 255, 0.10);
+    --btn-bg-hover: rgba(255, 255, 255, 0.20);
+}
 
-        canvas {
-            position: absolute; top: 0; left: 0;
-            width: 100%; height: 100%;
-            z-index: 1;
-            background-color: #000;
-        }
+html, body { margin: 0; padding: 0; width: 100%; }
 
-        #ui-layer {
-            position: relative;
-            z-index: 10;
-            text-align: center;
-            pointer-events: none;
-            transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
-        }
+body {
+    background-color: var(--bg);
+    color: var(--fg);
+    transition: background-color .5s ease, color .5s ease;
+    position: relative;
+    overflow-x: hidden;
+    font-family: system-ui, -apple-system, sans-serif;
+}
 
-        body.playlist-active #ui-layer {
-            transform: translateY(-160px);
-        }
+/* ==== ORBE (petita, menys blur = menys RAM GPU) ==== */
+.floating-orb {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 320px;
+    height: 320px;
+    border-radius: 50%;
+    background: radial-gradient(circle,
+                rgba(255, 20, 147, 0.55) 0%,
+                rgba(255, 80, 0, 0.35) 45%,
+                rgba(255, 180, 0, 0.12) 72%,
+                transparent 90%);
+    filter: blur(30px);
+    pointer-events: none;
+    z-index: 0;
+    transform: translate3d(0, 0, 0);
+    will-change: transform;
+    contain: strict;
+}
 
-        #clock {
-            font-size: clamp(3rem, 12vw, 6rem);
-            font-weight: 700;
-            color: rgba(255, 255, 255, 0.95);
-            letter-spacing: -2px;
-            font-variant-numeric: tabular-nums;
-            text-shadow: 0 0 40px rgba(0, 0, 0, 1);
-        }
+/* ==== THEME BUTTON (sense backdrop-filter) ==== */
+#theme-icon {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    z-index: 50;
+    padding: 0.5rem;
+    border-radius: 9999px;
+    border: none;
+    background-color: var(--btn-bg);
+    color: var(--fg);
+    cursor: pointer;
+    transition: opacity .5s ease, background-color .2s ease;
+    opacity: 0;
+    pointer-events: none;
+}
+#theme-icon:hover { background-color: var(--btn-bg-hover); }
+#theme-icon.visible { opacity: 1; pointer-events: auto; }
+#theme-icon svg { display: block; }
 
-        #playlist-container {
-            position: absolute;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 20;
-            width: 90%;
-            max-width: 400px;
-            background: var(--apple-glass);
-            backdrop-filter: blur(35px);
-            -webkit-backdrop-filter: blur(35px);
-            border-radius: 30px;
-            border: 1px solid var(--apple-border);
-            padding: 20px;
-            pointer-events: auto;
-            transition: all 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
-            box-shadow: 0 25px 50px rgba(0,0,0,0.6);
-        }
+/* ==== MAIN ==== */
+.main-wrap {
+    position: relative;
+    z-index: 10;
+    width: 100%;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    -webkit-user-select: none;
+    padding: 4rem 0;
+}
 
-        #playlist-container.minimized {
-            transform: translateX(-50%) translateY(50px);
-            opacity: 0;
-            pointer-events: none;
-        }
+.main-container {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Bebas Neue', 'Arial Narrow', sans-serif;
+    font-size: 20vw;
+    letter-spacing: -0.05em;
+    line-height: 1;
+    padding: 0 1rem;
+    flex-shrink: 0;
+}
+@media (min-width: 768px) {
+    .main-container { font-size: 16vw; }
+}
 
-        #current-track {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            margin-bottom: 20px;
-        }
+.group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+}
 
-        #track-art {
-            width: 60px;
-            height: 60px;
-            border-radius: 12px;
-            background: linear-gradient(45deg, #333, #555);
-            box-shadow: 0 8px 16px rgba(0,0,0,0.4);
-        }
+/* ==== WHEELS ==== */
+.wheel-mask {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 12%, #000 88%, transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0%, #000 12%, #000 88%, transparent 100%);
+    flex-shrink: 0;
+}
 
-        #track-info { text-align: left; overflow: hidden; flex-grow: 1; }
-        #track-name { color: white; font-weight: 600; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        #track-artist { color: rgba(255, 255, 255, 0.5); font-size: 0.85rem; }
+.number-wheel {
+    display: inline-flex;
+    justify-content: center;
+    align-items: flex-start;
+    overflow: hidden;
+    height: 1em;
+    line-height: 1em;
+    vertical-align: baseline;
+    position: relative;
+    flex-shrink: 0;
+    contain: layout paint;
+}
 
-        #player-controls {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 30px;
-            margin-bottom: 20px;
-        }
+.number-track {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    backface-visibility: hidden;
+}
 
-        .control-btn {
-            background: none;
-            border: none;
-            cursor: pointer;
-            padding: 10px;
-            color: white;
-            transition: transform 0.1s;
-        }
+.number-track > span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 1em;
+    min-height: 1em;
+    max-height: 1em;
+    line-height: 1em;
+    flex: 0 0 1em;
+    white-space: nowrap;
+}
 
-        .control-btn:active { transform: scale(0.92); }
-        .control-btn svg { width: 24px; height: 24px; fill: currentColor; }
+.colon {
+    font-size: 0.22em;
+    opacity: 0.5;
+    line-height: 1;
+    align-self: center;
+    user-select: none;
+    margin-left: 0.2em;
+    margin-right: 0.2em;
+}
+@media (min-width: 768px) {
+    .colon {
+        margin-left: 0.25em;
+        margin-right: 0.25em;
+    }
+}
 
-        #queue {
-            max-height: 140px;
-            overflow-y: auto;
-            border-top: 1px solid var(--apple-border);
-            padding-top: 10px;
-        }
+/* ==== SCROLL SECTION ==== */
+#scroll-section {
+    position: relative;
+    z-index: 10;
+    width: 100%;
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 4rem 1rem 6rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .8s ease;
+}
+#scroll-section.visible { opacity: 1; pointer-events: auto; }
 
-        .queue-item {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px;
-            border-radius: 12px;
-            cursor: pointer;
-        }
+#section-title {
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    text-align: center;
+    opacity: 0.45;
+    margin: 0 0 3.5rem;
+}
 
-        .queue-item.active { background: rgba(255, 255, 255, 0.1); }
-        .queue-name { color: #fff; font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#small-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 3.5rem 2rem;
+}
+@media (min-width: 768px) {
+    #small-grid { grid-template-columns: repeat(3, 1fr); }
+}
 
-        #upload-label {
-            display: block;
-            margin-top: 15px;
-            text-align: center;
-            color: rgba(255, 255, 255, 0.4);
-            font-size: 0.75rem;
-            cursor: pointer;
-        }
+.slot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    content-visibility: auto;
+    contain-intrinsic-size: 0 5rem;
+}
 
-        input[type="file"] { display: none; }
-        
-        #audio-element-container { display: none; }
-    </style>
+.small-title {
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    opacity: 0.7;
+    margin-bottom: 0.7rem;
+    font-family: system-ui, -apple-system, sans-serif;
+    font-weight: 700;
+    text-align: center;
+    min-height: 1.2em;
+}
+
+.small-countdown-wrap {
+    font-size: clamp(1.5rem, 2.6vw, 2.4rem);
+    font-family: 'Bebas Neue', 'Arial Narrow', sans-serif;
+    letter-spacing: -0.05em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.small-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.small-colon {
+    font-size: 0.5em;
+    opacity: 0.55;
+    line-height: 1;
+    align-self: center;
+    user-select: none;
+    margin-left: 0.2em;
+    margin-right: 0.2em;
+    transform: translateY(-0.05em);
+}
+</style>
 </head>
-<body>
+<body class="w-full relative">
 
-    <canvas id="canvas"></canvas>
+    <div id="glowing-orb" class="floating-orb"></div>
 
-    <div id="ui-layer">
-        <div id="clock">00:00:00</div>
-    </div>
+    <button id="theme-icon" aria-label="Canviar tema">
+        <svg id="icon-sun" xmlns="http://www.w3.org/2000/svg" width="20" height="20"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="4"/>
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+        </svg>
+        <svg id="icon-moon" xmlns="http://www.w3.org/2000/svg" width="20" height="20"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             style="display:none">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+    </button>
 
-    <div id="audio-element-container">
-        <audio id="main-audio" crossOrigin="anonymous"></audio>
-    </div>
-
-    <div id="playlist-container">
-        <div id="current-track">
-            <div id="track-art"></div>
-            <div id="track-info">
-                <div id="track-name">Sense música</div>
-                <div id="track-artist">Carrega els teus MP3</div>
+    <div class="main-wrap">
+        <div class="main-container">
+            <div class="group">
+                <div class="wheel-mask">
+                    <div class="number-wheel"><div class="number-track" id="hours-tens-track"></div></div>
+                    <div class="number-wheel"><div class="number-track" id="hours-units-track"></div></div>
+                </div>
+            </div>
+            <span class="colon">:</span>
+            <div class="group">
+                <div class="wheel-mask">
+                    <div class="number-wheel"><div class="number-track" id="mins-tens-track"></div></div>
+                    <div class="number-wheel"><div class="number-track" id="mins-units-track"></div></div>
+                </div>
+            </div>
+            <span class="colon">:</span>
+            <div class="group">
+                <div class="wheel-mask">
+                    <div class="number-wheel"><div class="number-track" id="secs-tens-track"></div></div>
+                    <div class="number-wheel"><div class="number-track" id="secs-units-track"></div></div>
+                </div>
             </div>
         </div>
-
-        <div id="player-controls">
-            <button class="control-btn" id="prev-btn"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button>
-            <button class="control-btn" id="play-pause-btn">
-                <svg id="play-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                <svg id="pause-icon" viewBox="0 0 24 24" style="display:none;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-            </button>
-            <button class="control-btn" id="next-btn"><svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg></button>
-        </div>
-
-        <div id="queue"></div>
-
-        <label id="upload-label">
-            + Afegir Música (Llista de reproducció)
-            <input type="file" id="audio-input" accept="audio/*" multiple>
-        </label>
     </div>
 
-    <script>
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d', { alpha: false });
-        const clockElement = document.getElementById('clock');
-        const audioInput = document.getElementById('audio-input');
-        const queueElement = document.getElementById('queue');
-        const trackName = document.getElementById('track-name');
-        const trackArtist = document.getElementById('track-artist');
-        const playlistContainer = document.getElementById('playlist-container');
-        const playPauseBtn = document.getElementById('play-pause-btn');
-        const playIcon = document.getElementById('play-icon');
-        const pauseIcon = document.getElementById('pause-icon');
-        const mainAudio = document.getElementById('main-audio');
-        
-        let audioCtx, analyserL, analyserR, dataL, dataR;
-        let sourceNode = null; 
-        let playlist = [];
-        let currentIndex = -1;
-        
-        let smoothL = 0, smoothR = 0, smoothC = 0, hue = 0;
-        let w, h;
+    <section id="scroll-section">
+        <h2 id="section-title">Rellotges del món</h2>
+        <div id="small-grid"></div>
+    </section>
 
-        function resize() {
-            w = canvas.width = window.innerWidth;
-            h = canvas.height = window.innerHeight;
+<script>
+(function () {
+    'use strict';
+
+    var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var allWheels = [];
+
+    /* =========================================================
+       1. ORBE ANIMADA (30fps, no 60)
+       ========================================================= */
+    var orb = document.getElementById('glowing-orb');
+    var orbRunning = !reduceMotion;
+    var lastOrbFrame = 0;
+
+    function animateOrb(now) {
+        if (!orbRunning) return;
+        if (now - lastOrbFrame > 33) {
+            var t = now * 0.0006;
+            var x = window.innerWidth  / 2 + Math.sin(t * 0.8) * window.innerWidth  * 0.38;
+            var y = window.innerHeight / 2 + Math.cos(t * 0.5) * window.innerHeight * 0.32;
+            orb.style.transform = 'translate3d(' + (x - 160) + 'px,' + (y - 160) + 'px,0)';
+            lastOrbFrame = now;
         }
-        window.addEventListener('resize', resize);
-        resize();
+        requestAnimationFrame(animateOrb);
+    }
+    if (orbRunning) requestAnimationFrame(animateOrb);
 
-        function updateClock() {
-            const now = new Date();
-            clockElement.textContent = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+    /* =========================================================
+       2. ICONA DE TEMA
+       ========================================================= */
+    var themeIcon = document.getElementById('theme-icon');
+    var iconSun   = document.getElementById('icon-sun');
+    var iconMoon  = document.getElementById('icon-moon');
+    var hideTimer = null;
+
+    function updateThemeIcon() {
+        var isDark = document.body.classList.contains('alt');
+        iconSun.style.display  = isDark ? 'none'  : 'block';
+        iconMoon.style.display = isDark ? 'block' : 'none';
+    }
+    function revealIcon() {
+        themeIcon.classList.add('visible');
+        clearTimeout(hideTimer);
+        hideTimer = setTimeout(function () {
+            themeIcon.classList.remove('visible');
+        }, 2200);
+    }
+    document.addEventListener('mousemove', revealIcon, { passive: true });
+    document.addEventListener('touchstart', revealIcon, { passive: true });
+    themeIcon.addEventListener('click', function () {
+        document.body.classList.toggle('alt');
+        updateThemeIcon();
+        revealIcon();
+    });
+    updateThemeIcon();
+
+    /* =========================================================
+       3. RODET NUMÈRIC (ASCENDENT — pensat per a rellotges)
+       =========================================================
+       Ordre intern: [0, 1, 2, ..., maxDigit] × repeats.
+       Els passos es calculen com (nou - vell), de manera que
+       els dígits pugen suaument (5 → 6 → 7 ...) tal com fa un
+       rellotge real. Amb l'ordre antic (descendent) les rodes
+       saltaven sense animar-se.
+       ========================================================= */
+    var TRANSITION = 'transform .55s cubic-bezier(.22, 1, .36, 1)';
+    var digitWidthCache = {};
+    var measureCanvas = document.createElement('canvas');
+    var measureCtx = measureCanvas.getContext('2d');
+
+    function measureDigit(digit, fontSize) {
+        var key = digit + '@' + fontSize.toFixed(2);
+        var w = digitWidthCache[key];
+        if (w !== undefined) return w;
+        measureCtx.font = '400 ' + fontSize + 'px "Bebas Neue", "Arial Narrow", sans-serif';
+        w = measureCtx.measureText(String(digit)).width;
+        digitWidthCache[key] = w;
+        return w;
+    }
+
+    function Wheel(trackEl, maxDigit, repeats) {
+        this.track     = trackEl;
+        this.maxDigit  = maxDigit;
+        this.L         = maxDigit + 1;
+        this.repeats   = repeats || 3;
+        this.total     = this.L * this.repeats;
+        this.pos       = 0;
+        this.digit     = null;
+        this.step      = 0;
+        this.wheelEl   = trackEl.parentElement;
+
+        // === ORDRE ASCENDENT: 0, 1, 2, ..., maxDigit ===
+        var html = '';
+        for (var r = 0; r < this.repeats; r++) {
+            for (var d = 0; d <= maxDigit; d++) {
+                html += '<span>' + d + '</span>';
+            }
         }
+        trackEl.innerHTML = html;
 
-        function initAudioContext() {
-            if (audioCtx) return;
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            analyserL = audioCtx.createAnalyser();
-            analyserR = audioCtx.createAnalyser();
-            analyserL.fftSize = 256; // Més resolució per a les vores
-            analyserR.fftSize = 256;
-            dataL = new Uint8Array(analyserL.frequencyBinCount);
-            dataR = new Uint8Array(analyserR.frequencyBinCount);
+        allWheels.push(this);
+    }
 
-            sourceNode = audioCtx.createMediaElementSource(mainAudio);
-            const splitter = audioCtx.createChannelSplitter(2);
-            sourceNode.connect(splitter);
-            splitter.connect(analyserL, 0);
-            splitter.connect(analyserR, 1);
-            sourceNode.connect(audioCtx.destination);
-            
-            render();
+    // Amb ordre ascendent, l'índex del dígit és el propi dígit.
+    Wheel.prototype._indexOf = function (digit) { return digit; };
+
+    Wheel.prototype._measure = function () {
+        var fs = parseFloat(window.getComputedStyle(this.track).fontSize);
+        this.step = (isFinite(fs) && fs > 0) ? fs : 16;
+    };
+
+    Wheel.prototype._fitWidth = function () {
+        if (this.digit === null) return;
+        var w = measureDigit(this.digit, this.step);
+        this.wheelEl.style.width = w + 'px';
+    };
+
+    Wheel.prototype._render = function (animate) {
+        this.track.style.transition = animate ? TRANSITION : 'none';
+        if (!this.step) this._measure();
+        this.track.style.transform =
+            'translate3d(0,' + (-this.pos * this.step) + 'px,0)';
+    };
+
+    Wheel.prototype.remeasure = function () {
+        this._measure();
+        this._render(false);
+        this._fitWidth();
+    };
+
+    Wheel.prototype.reset = function (digit) {
+        if (digit > this.maxDigit) digit = this.maxDigit;
+        if (digit < 0) digit = 0;
+        this.digit = digit;
+        this.pos = (this.repeats >= 2 ? this.L : 0) + this._indexOf(digit);
+        this._render(false);
+        this._fitWidth();
+        void this.track.offsetHeight;
+    };
+
+    Wheel.prototype.set = function (digit, animate) {
+        if (digit > this.maxDigit) digit = this.maxDigit;
+        if (digit < 0) digit = 0;
+        if (digit === this.digit) return;
+        if (!animate || this.digit === null) { this.reset(digit); return; }
+        var L = this.L;
+        // === PASSOS ASCENDENTS: (nou - vell + L) % L ===
+        var steps = ((digit - this.digit) % L + L) % L;
+        if (steps === 0) return;
+        // Si el salt és massa gran (> meitat de la roda), resetejem sense animar
+        if (steps * 2 > L) { this.reset(digit); return; }
+        var lastIndex = this.total - 1;
+        if (this.repeats >= 3 && this.pos + steps > lastIndex) {
+            this.pos -= L * (this.repeats - 2);
+            this._render(false);
+            void this.track.offsetHeight;
         }
+        this.pos += steps;
+        this.digit = digit;
+        this._render(true);
+        this._fitWidth();
+    };
 
-        audioInput.onchange = (e) => {
-            const files = Array.from(e.target.files);
-            if (files.length === 0) return;
-            const wasEmpty = playlist.length === 0;
-            files.forEach(file => {
-                playlist.push({ 
-                    file, 
-                    title: file.name.replace(/\.[^/.]+$/, ""),
-                    url: URL.createObjectURL(file) 
+    var resizeTimer = null;
+    window.addEventListener('resize', function () {
+        if (resizeTimer) clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(function () {
+            digitWidthCache = {};
+            for (var i = 0; i < allWheels.length; i++) allWheels[i].remeasure();
+        }, 150);
+    }, { passive: true });
+
+    if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(function () {
+            digitWidthCache = {};
+            for (var i = 0; i < allWheels.length; i++) allWheels[i].remeasure();
+        });
+    }
+
+    /* =========================================================
+       4. ZONES HORÀRIES / PAÏSOS
+       ========================================================= */
+    var COUNTRIES = [
+        ['Afghanistan', 'Asia/Kabul'],
+        ['Albània', 'Europe/Tirane'],
+        ['Alemanya', 'Europe/Berlin'],
+        ['Algèria', 'Africa/Algiers'],
+        ['Andorra', 'Europe/Andorra'],
+        ['Angola', 'Africa/Luanda'],
+        ['Antigua i Barbuda', 'America/Antigua'],
+        ['Aràbia Saudita', 'Asia/Riyadh'],
+        ['Argentina', 'America/Argentina/Buenos_Aires'],
+        ['Armènia', 'Asia/Yerevan'],
+        ['Austràlia', 'Australia/Sydney'],
+        ['Àustria', 'Europe/Vienna'],
+        ['Azerbaidjan', 'Asia/Baku'],
+        ['Bahames', 'America/Nassau'],
+        ['Bahrain', 'Asia/Bahrain'],
+        ['Bangladesh', 'Asia/Dhaka'],
+        ['Barbados', 'America/Barbados'],
+        ['Belarús', 'Europe/Minsk'],
+        ['Bèlgica', 'Europe/Brussels'],
+        ['Belize', 'America/Belize'],
+        ['Benín', 'Africa/Porto-Novo'],
+        ['Bhutan', 'Asia/Thimphu'],
+        ['Bolívia', 'America/La_Paz'],
+        ['Bòsnia i Hercegovina', 'Europe/Sarajevo'],
+        ['Botswana', 'Africa/Gaborone'],
+        ['Brasil', 'America/Sao_Paulo'],
+        ['Brunei', 'Asia/Brunei'],
+        ['Bulgària', 'Europe/Sofia'],
+        ['Burkina Faso', 'Africa/Ouagadougou'],
+        ['Burundi', 'Africa/Bujumbura'],
+        ['Cambodja', 'Asia/Phnom_Penh'],
+        ['Camerun', 'Africa/Douala'],
+        ['Canadà', 'America/Toronto'],
+        ['Cap Verd', 'Atlantic/Cape_Verde'],
+        ['Colòmbia', 'America/Bogota'],
+        ['Comores', 'Indian/Comoro'],
+        ['Corea del Nord', 'Asia/Pyongyang'],
+        ['Corea del Sud', 'Asia/Seoul'],
+        ['Costa d\'Ivori', 'Africa/Abidjan'],
+        ['Costa Rica', 'America/Costa_Rica'],
+        ['Croàcia', 'Europe/Zagreb'],
+        ['Cuba', 'America/Havana'],
+        ['Dinamarca', 'Europe/Copenhagen'],
+        ['Djibouti', 'Africa/Djibouti'],
+        ['Dominica', 'America/Dominica'],
+        ['Egipte', 'Africa/Cairo'],
+        ['El Salvador', 'America/El_Salvador'],
+        ['Emirats Àrabs Units', 'Asia/Dubai'],
+        ['Equador', 'America/Guayaquil'],
+        ['Eritrea', 'Africa/Asmara'],
+        ['Eslovàquia', 'Europe/Bratislava'],
+        ['Eslovènia', 'Europe/Ljubljana'],
+        ['Espanya', 'Europe/Madrid'],
+        ['Estats Units', 'America/New_York'],
+        ['Estònia', 'Europe/Tallinn'],
+        ['Eswatini', 'Africa/Mbabane'],
+        ['Etiòpia', 'Africa/Addis_Ababa'],
+        ['Fiji', 'Pacific/Fiji'],
+        ['Filipines', 'Asia/Manila'],
+        ['Finlàndia', 'Europe/Helsinki'],
+        ['França', 'Europe/Paris'],
+        ['Gabon', 'Africa/Libreville'],
+        ['Gàmbia', 'Africa/Banjul'],
+        ['Geòrgia', 'Asia/Tbilisi'],
+        ['Ghana', 'Africa/Accra'],
+        ['Grècia', 'Europe/Athens'],
+        ['Grenada', 'America/Grenada'],
+        ['Guatemala', 'America/Guatemala'],
+        ['Guinea', 'Africa/Conakry'],
+        ['Guinea Bissau', 'Africa/Bissau'],
+        ['Guinea Equatorial', 'Africa/Malabo'],
+        ['Guyana', 'America/Guyana'],
+        ['Haití', 'America/Port-au-Prince'],
+        ['Hondures', 'America/Tegucigalpa'],
+        ['Hongria', 'Europe/Budapest'],
+        ['Iemen', 'Asia/Aden'],
+        ['Índia', 'Asia/Kolkata'],
+        ['Indonèsia', 'Asia/Jakarta'],
+        ['Iran', 'Asia/Tehran'],
+        ['Iraq', 'Asia/Baghdad'],
+        ['Irlanda', 'Europe/Dublin'],
+        ['Islàndia', 'Atlantic/Reykjavik'],
+        ['Israel', 'Asia/Jerusalem'],
+        ['Itàlia', 'Europe/Rome'],
+        ['Jamaica', 'America/Jamaica'],
+        ['Japó', 'Asia/Tokyo'],
+        ['Jordània', 'Asia/Amman'],
+        ['Kazakhstan', 'Asia/Almaty'],
+        ['Kenya', 'Africa/Nairobi'],
+        ['Kirguizistan', 'Asia/Bishkek'],
+        ['Kiribati', 'Pacific/Tarawa'],
+        ['Kuwait', 'Asia/Kuwait'],
+        ['Laos', 'Asia/Vientiane'],
+        ['Lesotho', 'Africa/Maseru'],
+        ['Letònia', 'Europe/Riga'],
+        ['Líban', 'Asia/Beirut'],
+        ['Libèria', 'Africa/Monrovia'],
+        ['Líbia', 'Africa/Tripoli'],
+        ['Liechtenstein', 'Europe/Vaduz'],
+        ['Lituània', 'Europe/Vilnius'],
+        ['Luxemburg', 'Europe/Luxembourg'],
+        ['Macedònia del Nord', 'Europe/Skopje'],
+        ['Madagascar', 'Indian/Antananarivo'],
+        ['Malàisia', 'Asia/Kuala_Lumpur'],
+        ['Malawi', 'Africa/Blantyre'],
+        ['Maldives', 'Indian/Maldives'],
+        ['Mali', 'Africa/Bamako'],
+        ['Malta', 'Europe/Malta'],
+        ['Marroc', 'Africa/Casablanca'],
+        ['Maurici', 'Indian/Mauritius'],
+        ['Mauritània', 'Africa/Nouakchott'],
+        ['Mèxic', 'America/Mexico_City'],
+        ['Micronèsia', 'Pacific/Chuuk'],
+        ['Moçambic', 'Africa/Maputo'],
+        ['Moldàvia', 'Europe/Chisinau'],
+        ['Mònaco', 'Europe/Monaco'],
+        ['Mongòlia', 'Asia/Ulaanbaatar'],
+        ['Montenegro', 'Europe/Podgorica'],
+        ['Namíbia', 'Africa/Windhoek'],
+        ['Nauru', 'Pacific/Nauru'],
+        ['Nepal', 'Asia/Kathmandu'],
+        ['Nicaragua', 'America/Managua'],
+        ['Níger', 'Africa/Niamey'],
+        ['Nigèria', 'Africa/Lagos'],
+        ['Noruega', 'Europe/Oslo'],
+        ['Nova Zelanda', 'Pacific/Auckland'],
+        ['Oman', 'Asia/Muscat'],
+        ['Països Baixos', 'Europe/Amsterdam'],
+        ['Pakistan', 'Asia/Karachi'],
+        ['Palau', 'Pacific/Palau'],
+        ['Palestina', 'Asia/Gaza'],
+        ['Panamà', 'America/Panama'],
+        ['Papua Nova Guinea', 'Pacific/Port_Moresby'],
+        ['Paraguai', 'America/Asuncion'],
+        ['Perú', 'America/Lima'],
+        ['Polònia', 'Europe/Warsaw'],
+        ['Portugal', 'Europe/Lisbon'],
+        ['Qatar', 'Asia/Qatar'],
+        ['Regne Unit', 'Europe/London'],
+        ['República Centreafricana', 'Africa/Bangui'],
+        ['República Democràtica del Congo', 'Africa/Kinshasa'],
+        ['República del Congo', 'Africa/Brazzaville'],
+        ['República Dominicana', 'America/Santo_Domingo'],
+        ['República Txeca', 'Europe/Prague'],
+        ['Romania', 'Europe/Bucharest'],
+        ['Ruanda', 'Africa/Kigali'],
+        ['Rússia', 'Europe/Moscow'],
+        ['Saint Kitts i Nevis', 'America/St_Kitts'],
+        ['Saint Lucia', 'America/St_Lucia'],
+        ['Saint Vincent i les Grenadines', 'America/St_Vincent'],
+        ['Samoa', 'Pacific/Apia'],
+        ['San Marino', 'Europe/San_Marino'],
+        ['São Tomé i Príncipe', 'Africa/Sao_Tome'],
+        ['Senegal', 'Africa/Dakar'],
+        ['Sèrbia', 'Europe/Belgrade'],
+        ['Seychelles', 'Indian/Mahe'],
+        ['Sierra Leone', 'Africa/Freetown'],
+        ['Singapur', 'Asia/Singapore'],
+        ['Síria', 'Asia/Damascus'],
+        ['Somàlia', 'Africa/Mogadishu'],
+        ['Sri Lanka', 'Asia/Colombo'],
+        ['Sudan', 'Africa/Khartoum'],
+        ['Sudan del Sud', 'Africa/Juba'],
+        ['Suècia', 'Europe/Stockholm'],
+        ['Suïssa', 'Europe/Zurich'],
+        ['Surinam', 'America/Paramaribo'],
+        ['Tadjikistan', 'Asia/Dushanbe'],
+        ['Tailàndia', 'Asia/Bangkok'],
+        ['Tanzània', 'Africa/Dar_es_Salaam'],
+        ['Timor Oriental', 'Asia/Dili'],
+        ['Togo', 'Africa/Lome'],
+        ['Tonga', 'Pacific/Tongatapu'],
+        ['Trinitat i Tobago', 'America/Port_of_Spain'],
+        ['Tunísia', 'Africa/Tunis'],
+        ['Turkmenistan', 'Asia/Ashgabat'],
+        ['Turquia', 'Europe/Istanbul'],
+        ['Tuvalu', 'Pacific/Funafuti'],
+        ['Ucraïna', 'Europe/Kyiv'],
+        ['Uganda', 'Africa/Kampala'],
+        ['Uruguai', 'America/Montevideo'],
+        ['Uzbekistan', 'Asia/Tashkent'],
+        ['Vanuatu', 'Pacific/Efate'],
+        ['Vaticà', 'Europe/Vatican'],
+        ['Veneçuela', 'America/Caracas'],
+        ['Vietnam', 'Asia/Ho_Chi_Minh'],
+        ['Xile', 'America/Santiago'],
+        ['Xina', 'Asia/Shanghai'],
+        ['Xipre', 'Asia/Nicosia'],
+        ['Zàmbia', 'Africa/Lusaka'],
+        ['Zimbabwe', 'Africa/Harare'],
+        ['Illes Marshall', 'Pacific/Majuro'],
+        ['Illes Salomó', 'Pacific/Guadalcanal']
+    ];
+
+    /* ---------- Formatters amb caché ---------- */
+    var tzFmtCache = {};
+
+    function tzFormatter(tz) {
+        var f = tzFmtCache[tz];
+        if (f === undefined) {
+            try {
+                f = new Intl.DateTimeFormat('en-GB', {
+                    timeZone: tz,
+                    hour12: false,
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
                 });
-            });
-            updateQueueUI();
-            if (wasEmpty) playTrack(0);
-        };
-
-        function updateQueueUI() {
-            queueElement.innerHTML = '';
-            playlist.forEach((item, index) => {
-                const div = document.createElement('div');
-                div.className = `queue-item ${index === currentIndex ? 'active' : ''}`;
-                div.onclick = (e) => { e.stopPropagation(); playTrack(index); };
-                div.innerHTML = `<div class="queue-name">${item.title}</div>`;
-                queueElement.appendChild(div);
-            });
+            } catch (e) { f = null; }
+            tzFmtCache[tz] = f;
         }
+        return f;
+    }
 
-        async function playTrack(index) {
-            if (index < 0 || index >= playlist.length) return;
-            
-            initAudioContext();
-            if (audioCtx.state === 'suspended') await audioCtx.resume();
-
-            currentIndex = index;
-            const track = playlist[index];
-            trackName.textContent = track.title;
-            trackArtist.textContent = "Preparant...";
-            updateQueueUI();
-
-            mainAudio.src = track.url;
-            mainAudio.load();
-            
-            mainAudio.play().then(() => {
-                trackArtist.textContent = "Reproduint";
-                updateButtons();
-            }).catch(err => {
-                console.error("Error:", err);
-                trackArtist.textContent = "Error de format";
-            });
+    function timeInZone(tz) {
+        var d = new Date();
+        var f = tzFormatter(tz);
+        if (!f) {
+            return { h: d.getHours(), m: d.getMinutes(), s: d.getSeconds() };
         }
-
-        mainAudio.onended = () => {
-            if (currentIndex < playlist.length - 1) playTrack(currentIndex + 1);
-        };
-
-        function updateButtons() {
-            const isPlaying = !mainAudio.paused;
-            playIcon.style.display = isPlaying ? 'none' : 'block';
-            pauseIcon.style.display = isPlaying ? 'block' : 'none';
+        var parts = f.formatToParts(d);
+        var h = 0, m = 0, s = 0;
+        for (var i = 0; i < parts.length; i++) {
+            var p = parts[i];
+            if (p.type === 'hour')        h = parseInt(p.value, 10) % 24;
+            else if (p.type === 'minute') m = parseInt(p.value, 10);
+            else if (p.type === 'second') s = parseInt(p.value, 10);
         }
+        return { h: h, m: m, s: s };
+    }
 
-        playPauseBtn.onclick = (e) => {
-            e.stopPropagation();
-            if (!mainAudio.src) return;
-            if (mainAudio.paused) mainAudio.play(); else mainAudio.pause();
-            setTimeout(updateButtons, 50);
-        };
+    /* ---------- Detecció del país visitant ---------- */
+    var localTz = '';
+    try {
+        localTz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    } catch (e) { localTz = ''; }
 
-        document.getElementById('next-btn').onclick = () => {
-            if (currentIndex < playlist.length - 1) playTrack(currentIndex + 1);
-        };
+    var localCountry = null;
+    for (var ci = 0; ci < COUNTRIES.length; ci++) {
+        if (COUNTRIES[ci][1] === localTz) { localCountry = COUNTRIES[ci]; break; }
+    }
 
-        document.getElementById('prev-btn').onclick = () => {
-            if (currentIndex > 0) playTrack(currentIndex - 1);
-        };
+    /* =========================================================
+       5. RELLOTGE PRINCIPAL
+       ========================================================= */
+    var mainHT = new Wheel(document.getElementById('hours-tens-track'),  2, 4);
+    var mainHU = new Wheel(document.getElementById('hours-units-track'), 9, 3);
+    var mainMT = new Wheel(document.getElementById('mins-tens-track'),   5, 4);
+    var mainMU = new Wheel(document.getElementById('mins-units-track'),  9, 3);
+    var mainST = new Wheel(document.getElementById('secs-tens-track'),   5, 4);
+    var mainSU = new Wheel(document.getElementById('secs-units-track'),  9, 3);
 
-        function render() {
-            requestAnimationFrame(render);
-            const isPlaying = !mainAudio.paused;
-            
-            if (analyserL && isPlaying) {
-                analyserL.getByteFrequencyData(dataL);
-                analyserR.getByteFrequencyData(dataR);
-                
-                // Càlcul de brillantor basat en baixos i mitjos
-                let bL = (dataL[1] + dataL[2] + dataL[3]) / 765;
-                let bR = (dataR[1] + dataR[2] + dataR[3]) / 765;
-                
-                smoothL += (bL - smoothL) * 0.15;
-                smoothR += (bR - smoothR) * 0.15;
-                smoothC = (smoothL + smoothR) * 0.5;
-                
-                // Canvi de color suau
-                hue = (hue + 0.3 + (smoothC * 1.5)) % 360;
+    function updateMain(animate) {
+        var t = localTz
+            ? timeInZone(localTz)
+            : { h: new Date().getHours(), m: new Date().getMinutes(), s: new Date().getSeconds() };
+        mainHT.set(Math.floor(t.h / 10), animate);
+        mainHU.set(t.h % 10, animate);
+        mainMT.set(Math.floor(t.m / 10), animate);
+        mainMU.set(t.m % 10, animate);
+        mainST.set(Math.floor(t.s / 10), animate);
+        mainSU.set(t.s % 10, animate);
+    }
+
+    updateMain(false);
+
+    /* =========================================================
+       6. GRAELLA DE PAÏSOS (creació mandrosa dels rodets)
+       ========================================================= */
+    var grid = document.getElementById('small-grid');
+    var slots = [];
+    var visibleSlots = new Set();
+
+    var slotObserver = new IntersectionObserver(function (entries) {
+        for (var i = 0; i < entries.length; i++) {
+            var entry = entries[i];
+            var idx = parseInt(entry.target.dataset.slotIdx, 10);
+            if (entry.isIntersecting) {
+                visibleSlots.add(idx);
+                var s = slots[idx];
+                if (s) s.tick(false);
             } else {
-                smoothL *= 0.95; smoothR *= 0.95; smoothC *= 0.95;
+                visibleSlots.delete(idx);
             }
-
-            updateClock();
-            
-            // Fons negre pur
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.fillStyle = '#000';
-            ctx.fillRect(0, 0, w, h);
-            
-            // Efecte Ambilight vibrant
-            ctx.globalCompositeOperation = 'screen';
-            
-            // Mida dinàmica de l'halo
-            const edgeSize = Math.min(w, h) * 0.35; 
-            const pulse = edgeSize * smoothC;
-
-            // Gradient ESQUERRA
-            const gradL = ctx.createLinearGradient(0, 0, edgeSize + pulse, 0);
-            gradL.addColorStop(0, `hsla(${hue}, 100%, 50%, ${0.1 + smoothL * 0.8})`);
-            gradL.addColorStop(1, 'transparent');
-            ctx.fillStyle = gradL;
-            ctx.fillRect(0, 0, edgeSize + pulse, h);
-
-            // Gradient DRETA
-            const gradR = ctx.createLinearGradient(w, 0, w - (edgeSize + pulse), 0);
-            gradR.addColorStop(0, `hsla(${(hue + 60) % 360}, 100%, 50%, ${0.1 + smoothR * 0.8})`);
-            gradR.addColorStop(1, 'transparent');
-            ctx.fillStyle = gradR;
-            ctx.fillRect(w - (edgeSize + pulse), 0, edgeSize + pulse, h);
-
-            // Gradient SUPERIOR
-            const gradT = ctx.createLinearGradient(0, 0, 0, edgeSize * 0.7 + pulse);
-            gradT.addColorStop(0, `hsla(${(hue + 30) % 360}, 100%, 50%, ${0.1 + smoothC * 0.7})`);
-            gradT.addColorStop(1, 'transparent');
-            ctx.fillStyle = gradT;
-            ctx.fillRect(0, 0, w, edgeSize * 0.7 + pulse);
-
-            // Gradient INFERIOR
-            const gradB = ctx.createLinearGradient(0, h, 0, h - (edgeSize * 0.7 + pulse));
-            gradB.addColorStop(0, `hsla(${(hue + 200) % 360}, 100%, 50%, ${0.1 + smoothC * 0.7})`);
-            gradB.addColorStop(1, 'transparent');
-            ctx.fillStyle = gradB;
-            ctx.fillRect(0, h - (edgeSize * 0.7 + pulse), w, edgeSize * 0.7 + pulse);
-
-            // Animació del rellotge
-            clockElement.style.transform = `scale(${1 + (smoothC * 0.15)})`;
-            clockElement.style.textShadow = `0 0 ${20 + smoothC * 60}px hsla(${hue}, 100%, 70%, 0.5)`;
         }
+    }, { rootMargin: '400px 0px' });
 
-        window.onclick = (e) => {
-            if (!playlistContainer.contains(e.target)) {
-                playlistContainer.classList.toggle('minimized');
-                document.body.classList.toggle('playlist-active');
-            }
+    function groupHTML(prefix, wheels) {
+        var html = '<div class="small-group"><div class="wheel-mask">';
+        for (var i = 0; i < wheels.length; i++) {
+            html += '<div class="number-wheel"><div class="number-track" id="' +
+                    prefix + '-' + wheels[i] + '"></div></div>';
+        }
+        html += '</div></div>';
+        return html;
+    }
+
+    function Slot(idx, country) {
+        this.idx     = idx;
+        this.tz      = country[1];
+        this.wheels  = null;
+
+        var wrapper = document.createElement('div');
+        wrapper.className = 'slot';
+        wrapper.dataset.slotIdx = String(idx);
+
+        var p = 'slot-' + idx;
+        wrapper.innerHTML =
+            '<h3 class="small-title"></h3>' +
+            '<div class="small-countdown-wrap">' +
+                groupHTML(p, ['ht', 'hu']) +
+                '<span class="small-colon">:</span>' +
+                groupHTML(p, ['mt', 'mu']) +
+                '<span class="small-colon">:</span>' +
+                groupHTML(p, ['st', 'su']) +
+            '</div>';
+
+        wrapper.querySelector('.small-title').textContent = country[0];
+
+        grid.appendChild(wrapper);
+        this.el = wrapper;
+        slotObserver.observe(wrapper);
+    }
+
+    Slot.prototype.ensure = function () {
+        if (this.wheels) return;
+        var p = 'slot-' + this.idx;
+        this.wheels = {
+            ht: new Wheel(document.getElementById(p + '-ht'), 2, 4),
+            hu: new Wheel(document.getElementById(p + '-hu'), 9, 3),
+            mt: new Wheel(document.getElementById(p + '-mt'), 5, 4),
+            mu: new Wheel(document.getElementById(p + '-mu'), 9, 3),
+            st: new Wheel(document.getElementById(p + '-st'), 5, 4),
+            su: new Wheel(document.getElementById(p + '-su'), 9, 3)
         };
+    };
 
-        setInterval(updateClock, 1000);
-        updateClock();
-    </script>
+    Slot.prototype._write = function (animate) {
+        var t = timeInZone(this.tz);
+        var w = this.wheels;
+        w.ht.set(Math.floor(t.h / 10), animate);
+        w.hu.set(t.h % 10, animate);
+        w.mt.set(Math.floor(t.m / 10), animate);
+        w.mu.set(t.m % 10, animate);
+        w.st.set(Math.floor(t.s / 10), animate);
+        w.su.set(t.s % 10, animate);
+    };
+
+    Slot.prototype.tick = function (animate) {
+        this.ensure();
+        this._write(animate);
+    };
+
+    /* ---------- Construcció de la llista (sense el país local) ---------- */
+    var list = COUNTRIES.filter(function (c) {
+        return !localCountry || c[1] !== localCountry[1] || c[0] !== localCountry[0];
+    });
+    list.sort(function (a, b) { return a[0].localeCompare(b[0], 'ca'); });
+
+    for (var si = 0; si < list.length; si++) {
+        slots.push(new Slot(si, list[si]));
+    }
+
+    function refreshVisible(animate) {
+        visibleSlots.forEach(function (idx) {
+            var s = slots[idx];
+            if (s) s.tick(animate);
+        });
+    }
+
+    /* =========================================================
+       7. SCROLL SECTION
+       ========================================================= */
+    var scrollSection = document.getElementById('scroll-section');
+    var sectionVisible = false;
+
+    function checkScroll() {
+        var rect = scrollSection.getBoundingClientRect();
+        var isVis = rect.top < window.innerHeight * 0.9;
+        if (isVis !== sectionVisible) {
+            sectionVisible = isVis;
+            if (isVis) {
+                scrollSection.classList.add('visible');
+                refreshVisible(false);
+            } else {
+                scrollSection.classList.remove('visible');
+            }
+        }
+    }
+    window.addEventListener('scroll', checkScroll, { passive: true });
+    window.addEventListener('resize', checkScroll, { passive: true });
+    checkScroll();
+
+    /* =========================================================
+       8. BUCLE D'ACTUALITZACIÓ (alineat al segon)
+       ========================================================= */
+    var tickTimer = null;
+
+    function scheduleTick() {
+        if (tickTimer) return;
+        var delay = 1000 - (Date.now() % 1000);
+        tickTimer = setTimeout(function () {
+            tickTimer = null;
+            updateMain(true);
+            refreshVisible(true);
+            scheduleTick();
+        }, delay);
+    }
+    scheduleTick();
+
+    document.addEventListener('visibilitychange', function () {
+        orbRunning = !document.hidden && !reduceMotion;
+        if (orbRunning) requestAnimationFrame(animateOrb);
+
+        if (document.hidden) {
+            if (tickTimer) { clearTimeout(tickTimer); tickTimer = null; }
+        } else {
+            updateMain(true);
+            refreshVisible(true);
+            scheduleTick();
+        }
+    });
+
+})();
+</script>
 </body>
 </html>
