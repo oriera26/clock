@@ -2,7 +2,7 @@
 <html lang="ca">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>World Clock</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -48,6 +48,8 @@ body.alt {
 html, body { margin: 0; padding: 0; width: 100%; }
 
 html {
+    height: 100%;
+    min-height: 100%;
     scrollbar-width: none;
     -ms-overflow-style: none;
 }
@@ -62,6 +64,12 @@ body {
     overflow-x: hidden;
     font-family: system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
+
+    /* ===== FULL SCREEN / SAFE AREA ===== */
+    width: 100%;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overscroll-behavior-y: none;
 }
 body.no-scroll { overflow: hidden; }
 
@@ -141,8 +149,8 @@ body.no-scroll { overflow: hidden; }
 /* ==== TOP CONTROLS ==== */
 #top-controls {
     position: fixed;
-    top: 1rem;
-    right: 1rem;
+    top: calc(1rem + env(safe-area-inset-top, 0px));
+    right: calc(1rem + env(safe-area-inset-right, 0px));
     z-index: 90;
     display: flex;
     gap: 0.4rem;
@@ -188,6 +196,7 @@ body.no-scroll { overflow: hidden; }
     z-index: 10;
     width: 100%;
     min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -275,7 +284,9 @@ body.no-scroll { overflow: hidden; }
     width: 100%;
     max-width: 72rem;
     margin: 0 auto;
-    padding: 4rem 1rem 6rem;
+    padding: 4rem max(1rem, env(safe-area-inset-right, 1rem))
+             calc(6rem + env(safe-area-inset-bottom, 0px))
+             max(1rem, env(safe-area-inset-left, 1rem));
     animation: sectionIn .9s cubic-bezier(.22, 1, .36, 1) both;
 }
 @keyframes sectionIn {
@@ -487,7 +498,10 @@ body.no-scroll { overflow: hidden; }
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 1rem;
+    padding: calc(1rem + env(safe-area-inset-top, 0px))
+             calc(1rem + env(safe-area-inset-right, 0px))
+             calc(1rem + env(safe-area-inset-bottom, 0px))
+             calc(1rem + env(safe-area-inset-left, 0px));
     background: rgba(15, 12, 30, .14);
     -webkit-backdrop-filter: blur(8px) saturate(130%);
     backdrop-filter: blur(8px) saturate(130%);
@@ -503,6 +517,7 @@ body.no-scroll { overflow: hidden; }
     width: 100%;
     max-width: 400px;
     max-height: 86vh;
+    max-height: 86dvh;
     border-radius: 22px;
     overflow: hidden;
     transform: scale(.94) translateY(12px);
@@ -780,7 +795,7 @@ body.no-scroll { overflow: hidden; }
 #toast {
     position: fixed;
     left: 50%;
-    bottom: 1.6rem;
+    bottom: calc(1.6rem + env(safe-area-inset-bottom, 0px));
     transform: translateX(-50%) translateY(16px);
     color: var(--fg);
     padding: 0.5rem 1rem;
