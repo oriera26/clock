@@ -3,7 +3,43 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>World Clock</title>
+<title>World Clock — Rellotges del Món</title>
+
+<!-- ==================== PWA ==================== -->
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#f5f4f3" id="meta-theme-color">
+<meta name="color-scheme" content="light dark">
+
+<!-- iOS -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="World Clock">
+<link rel="apple-touch-icon" href="https://i.ibb.co/TMHCcTsQ/favicon.png">
+<link rel="apple-touch-icon" sizes="180x180" href="https://i.ibb.co/TMHCcTsQ/favicon.png">
+<link rel="mask-icon" href="https://i.ibb.co/TMHCcTsQ/favicon.png" color="#ff1493">
+
+<!-- Android / general -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="application-name" content="World Clock">
+<meta name="description" content="Rellotge mundial amb més de 190 països, rodes digitals animades, preferits i tema clar/fosc. Funciona sense connexió.">
+<meta name="keywords" content="rellotge, món, world clock, hores, zones horàries, PWA">
+<meta name="author" content="World Clock">
+
+<!-- Icones -->
+<link rel="icon" type="image/png" href="https://i.ibb.co/TMHCcTsQ/favicon.png">
+<link rel="shortcut icon" href="https://i.ibb.co/TMHCcTsQ/favicon.png">
+
+<!-- Open Graph (per compartir) -->
+<meta property="og:title" content="World Clock — Rellotges del Món">
+<meta property="og:description" content="Rellotge mundial amb més de 190 països, rodes digitals animades i preferits.">
+<meta property="og:image" content="https://i.ibb.co/TMHCcTsQ/favicon.png">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="World Clock — Rellotges del Món">
+<meta name="twitter:description" content="Rellotge mundial amb més de 190 països, rodes digitals animades i preferits.">
+<meta name="twitter:image" content="https://i.ibb.co/TMHCcTsQ/favicon.png">
+<!-- ============================================== -->
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
@@ -70,6 +106,10 @@ body {
     min-height: 100vh;
     min-height: 100dvh;
     overscroll-behavior-y: none;
+
+    /* ===== PWA: evita selecció accidental i tap highlight ===== */
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
 }
 body.no-scroll { overflow: hidden; }
 
@@ -820,6 +860,15 @@ body.no-scroll { overflow: hidden; }
     <div id="glowing-orb" class="floating-orb"></div>
 
     <div id="top-controls">
+        <button id="install-btn" aria-label="Instal·lar aplicació" style="display:none">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"
+                 viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+        </button>
         <button id="settings-icon" aria-label="Configuració">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"
                  viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -1085,6 +1134,13 @@ body.no-scroll { overflow: hidden; }
     var iconMoon   = document.getElementById('icon-moon');
     var hideTimer  = null;
 
+    function updateThemeColorMeta() {
+        var meta = document.getElementById('meta-theme-color');
+        if (!meta) return;
+        var isDark = document.body.classList.contains('alt');
+        meta.setAttribute('content', isDark ? '#0d0d10' : '#f5f4f3');
+    }
+
     function updateThemeIcon() {
         var isDark = document.body.classList.contains('alt');
         iconSun.style.display  = isDark ? 'none'  : 'block';
@@ -1093,6 +1149,7 @@ body.no-scroll { overflow: hidden; }
     function applyTheme() {
         document.body.classList.toggle('alt', settings.theme === 'dark');
         updateThemeIcon();
+        updateThemeColorMeta();
     }
     function revealControls() {
         topControls.classList.add('visible');
@@ -1839,6 +1896,59 @@ body.no-scroll { overflow: hidden; }
             scheduleTick();
         }
     });
+
+    /* =========================================================
+       14. PWA — INSTAL·LACIÓ + SERVICE WORKER
+       ========================================================= */
+    var installBtn = document.getElementById('install-btn');
+    var deferredPrompt = null;
+
+    window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        deferredPrompt = e;
+        installBtn.style.display = 'flex';
+        revealControls();
+    });
+
+    installBtn.addEventListener('click', function () {
+        if (!deferredPrompt) {
+            showToast('Ja instal·lada o no disponible');
+            return;
+        }
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then(function (choice) {
+            if (choice.outcome === 'accepted') {
+                showToast('Instal·lant...');
+            }
+            deferredPrompt = null;
+            installBtn.style.display = 'none';
+        });
+    });
+
+    window.addEventListener('appinstalled', function () {
+        installBtn.style.display = 'none';
+        deferredPrompt = null;
+        showToast('Aplicació instal·lada!');
+    });
+
+    /* Registre del Service Worker + notificació d'actualització */
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+            navigator.serviceWorker.register('./sw.js').then(function (reg) {
+                reg.addEventListener('updatefound', function () {
+                    var newWorker = reg.installing;
+                    if (!newWorker) return;
+                    newWorker.addEventListener('statechange', function () {
+                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            showToast('Nova versió disponible — recarrega');
+                        }
+                    });
+                });
+            }).catch(function () {
+                /* silenciós */
+            });
+        });
+    }
 
 })();
 </script>
