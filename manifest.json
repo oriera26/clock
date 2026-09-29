@@ -1,0 +1,67 @@
+{
+  "name": "World Clock",
+  "short_name": "World Clock",
+  "description": "Rellotge mundial amb més de 190 països, rodes digitals animades, preferits, tema clar/fosc i orbe decoratiu. Funciona sense connexió.",
+  "lang": "ca",
+  "dir": "ltr",
+  "id": "/world-clock/",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "orientation": "any",
+  "background_color": "#f5f4f3",
+  "theme_color": "#f5f4f3",
+  "categories": ["utilities", "productivity", "lifestyle", "travel"],
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "https://i.ibb.co/TMHCcTsQ/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://i.ibb.co/TMHCcTsQ/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://i.ibb.co/TMHCcTsQ/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "https://i.ibb.co/TMHCcTsQ/favicon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "apple touch icon"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Rellotges del món",
+      "short_name": "Rellotges",
+      "description": "Salta directament a la graella de rellotges mundials",
+      "url": "./#scroll-section",
+      "icons": [
+        {
+          "src": "https://i.ibb.co/TMHCcTsQ/favicon.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "https://i.ibb.co/TMHCcTsQ/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Rellotge principal"
+    }
+  ]
+}
